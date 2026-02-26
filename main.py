@@ -188,15 +188,17 @@ def main():
         else:
             logger.warning("ML model generated no signals — skipping ML backtest")
 
-    # ==========================================
+        # ==========================================
     # VISUALIZATION
     # ==========================================
     logger.info("\n📊 Generating Charts...")
 
+    # Chart 1: Price with Combined Strategy signals
     visualizer.plot_price_with_signals(
         first_df, first_symbol, signal_column="combined_signal"
     )
 
+    # Chart 2: Combined Strategy backtest results
     if "combined_signal" in basic_results:
         visualizer.plot_backtest_results(
             basic_results["combined_signal"]["portfolio_history"],
@@ -205,7 +207,19 @@ def main():
             basic_results["combined_signal"]["initial_capital"]
         )
 
+    # Chart 3: Strategy equity comparison
     visualizer.plot_equity_comparison(basic_results, first_symbol)
+
+    # Chart 4: ML Strategy signals (if ML generated signals)
+    first_ml_df = ml_processed.get(first_symbol)
+    if first_ml_df is not None and "ml_signal" in first_ml_df.columns:
+        if first_ml_df["ml_signal"].abs().sum() > 0:
+            visualizer.plot_price_with_signals(
+                first_ml_df, first_symbol, signal_column="ml_signal"
+            )
+
+    # Chart 5: MACD Analysis
+    visualizer.plot_macd(first_df, first_symbol)
 
     # ==========================================
     # SAVE

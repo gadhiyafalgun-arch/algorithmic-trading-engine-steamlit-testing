@@ -55,14 +55,6 @@ class MLPredictor:
                              confidence_threshold: float = 0.55) -> pd.DataFrame:
         """
         Generate trading signals from ML model.
-        
-        Args:
-            df: DataFrame with all features
-            confidence_threshold: Minimum probability to generate signal
-                                  0.55 = model must be at least 55% confident
-                                  
-        Returns:
-            DataFrame with ML signals added
         """
         df = df.copy()
 
@@ -88,12 +80,19 @@ class MLPredictor:
         # Prepare features
         X = df[available_features].copy()
 
-        # Handle NaN
-        X = X.fillna(method="ffill").fillna(0)
+        # Handle NaN and Inf values
+        X = X.ffill().fillna(0)
+        X = X.replace([np.inf, -np.inf], 0)
 
         # Predict
-        predictions = self.model.predict(X)
-        probabilities = self.model.predict_proba(X)
+        try:
+            predictions = self.model.predict(X)
+            probabilities = self.model.predict_proba(X)
+        except Exception as e:
+            logger.error(f"Prediction failed: {e}")
+            df["ml_signal"] = 0
+            df["ml_confidence"] = 0.5
+            return df
 
         # Get probability of class 1 (price goes up)
         if probabilities.shape[1] == 2:
@@ -101,15 +100,17 @@ class MLPredictor:
         else:
             confidence = probabilities.max(axis=1)
 
-        # Generate signals based on confidence threshold
+        # Convert numpy arrays to pandas Series
+        predictions = pd.Series(predictions, index=df.index)
+        confidence = pd.Series(confidence, index=df.index)
+
+        # Store in DataFrame
         df["ml_prediction"] = predictions
         df["ml_confidence"] = confidence
         df["ml_signal"] = 0
 
         # BUY: Model predicts UP with high confidence
         buy_mask = (predictions == 1) & (confidence >= confidence_threshold)
-
-        # Only signal on CHANGES (not every day)
         buy_change = buy_mask.astype(int).diff().fillna(0)
         df.loc[buy_change == 1, "ml_signal"] = 1
 
