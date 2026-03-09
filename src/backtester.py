@@ -404,6 +404,56 @@ class Backtester:
 
         return results
 
+    def run_with_risk_levels(self, df: pd.DataFrame, signal_column: str = "sma_signal",
+                              symbol: str = "UNKNOWN",
+                              risk_multipliers: list = None) -> dict:
+        """
+        Run backtest at multiple risk levels for the interactive risk bar.
+
+        Scales max_position_size and risk_per_trade by each multiplier.
+        Multiplier 1.0 = current config (baseline).
+
+        Args:
+            df: DataFrame with OHLCV data and signals
+            signal_column: Column containing trading signals
+            symbol: Stock ticker
+            risk_multipliers: List of floats, e.g. [0.25, 0.5, 1.0, 1.5, 2.0, 3.0]
+
+        Returns:
+            Dictionary of {multiplier: backtest_results}
+        """
+        if risk_multipliers is None:
+            risk_multipliers = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0]
+
+        # Save original config
+        orig_max_position = self.max_position_size
+        orig_risk_per_trade = self.risk_per_trade
+
+        all_risk_results = {}
+
+        for mult in risk_multipliers:
+            # Scale risk parameters (cap position size at 95% to stay realistic)
+            self.max_position_size = min(orig_max_position * mult, 0.95)
+            self.risk_per_trade = min(orig_risk_per_trade * mult, 0.20)
+
+            logger.info(f"Running risk level {mult:.2f}x "
+                       f"(pos_size={self.max_position_size*100:.1f}%, "
+                       f"risk/trade={self.risk_per_trade*100:.1f}%)")
+
+            results = self.run(df, signal_column=signal_column, symbol=symbol)
+            if results:
+                results["risk_multiplier"] = mult
+                results["position_size_pct"] = self.max_position_size * 100
+                results["risk_per_trade_pct"] = self.risk_per_trade * 100
+                all_risk_results[mult] = results
+
+        # Restore original config
+        self.max_position_size = orig_max_position
+        self.risk_per_trade = orig_risk_per_trade
+
+        logger.info(f"Completed {len(all_risk_results)} risk-level backtests")
+        return all_risk_results
+
     def run_multiple_strategies(self, df: pd.DataFrame, symbol: str,
                                  strategies: list = None) -> dict:
         """

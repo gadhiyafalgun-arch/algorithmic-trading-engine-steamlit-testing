@@ -21,6 +21,7 @@ xgboost
 
 # Dashboard
 streamlit
+dash
 
 # Database
 sqlalchemy

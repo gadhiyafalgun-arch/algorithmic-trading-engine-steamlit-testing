@@ -94,6 +94,16 @@ def main():
         print(comparison)
 
     # ==========================================
+    # PHASE 3B: Risk-Level Backtests (for Risk Bar)
+    # ==========================================
+    logger.info("\n🎚️ PHASE 3B: Risk-Level Backtests")
+    risk_level_results = backtester.run_with_risk_levels(
+        first_df,
+        signal_column="combined_signal" if "combined_signal" in first_df.columns else "sma_signal",
+        symbol=first_symbol
+    )
+
+    # ==========================================
     # PHASE 4: Risk Management
     # ==========================================
     logger.info("\n🛡️ PHASE 4: Risk Management")
@@ -189,28 +199,29 @@ def main():
             logger.warning("ML model generated no signals — skipping ML backtest")
 
         # ==========================================
-    # VISUALIZATION
+    # VISUALIZATION (3D + Animations)
     # ==========================================
-    logger.info("\n📊 Generating Charts...")
+    logger.info("\n📊 Generating 3D Charts...")
 
-    # Chart 1: Price with Combined Strategy signals
+    # Chart 1: Price with Combined Strategy signals (3D)
     visualizer.plot_price_with_signals(
         first_df, first_symbol, signal_column="combined_signal"
     )
 
-    # Chart 2: Combined Strategy backtest results
+    # Chart 2: Combined Strategy backtest results (3D + Risk Bar)
     if "combined_signal" in basic_results:
         visualizer.plot_backtest_results(
             basic_results["combined_signal"]["portfolio_history"],
             basic_results["combined_signal"]["trades"],
             first_symbol, "combined_signal",
-            basic_results["combined_signal"]["initial_capital"]
+            basic_results["combined_signal"]["initial_capital"],
+            risk_level_results=risk_level_results
         )
 
-    # Chart 3: Strategy equity comparison
+    # Chart 3: Strategy equity comparison (3D Ribbon)
     visualizer.plot_equity_comparison(basic_results, first_symbol)
 
-    # Chart 4: ML Strategy signals (if ML generated signals)
+    # Chart 4: ML Strategy signals (3D)
     first_ml_df = ml_processed.get(first_symbol)
     if first_ml_df is not None and "ml_signal" in first_ml_df.columns:
         if first_ml_df["ml_signal"].abs().sum() > 0:
@@ -218,7 +229,7 @@ def main():
                 first_ml_df, first_symbol, signal_column="ml_signal"
             )
 
-    # Chart 5: MACD Analysis
+    # Chart 5: MACD Analysis (3D)
     visualizer.plot_macd(first_df, first_symbol)
 
     # ==========================================
@@ -233,7 +244,7 @@ def main():
     logger.info("\n" + "=" * 60)
     logger.info("✅ ALL PHASES (1-5) COMPLETE!")
     logger.info("=" * 60)
-    logger.info("📁 Charts: docs/charts/")
+    logger.info("📁 3D Charts: docs/charts/")
     logger.info("📁 Data: data/processed/")
     logger.info("📁 Models: models/saved/")
     logger.info("🔜 Next: Phase 6 — Dashboard & Polish")
