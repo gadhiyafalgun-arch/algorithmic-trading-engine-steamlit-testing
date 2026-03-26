@@ -6,7 +6,6 @@ plotly
 scikit-learn
 xgboost
 streamlit==1.41.0
-pillow==11.1.0
 pyyaml
 python-dateutil
 tqdm
