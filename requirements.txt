@@ -1,40 +1,12 @@
-# Data & Computation
 numpy
 pandas
 scipy
-
-# Financial Data
 yfinance
-pandas-datareader
-
-# Technical Analysis
-pandas-ta
-
-# Visualization
-matplotlib
 plotly
-seaborn
-
-# Machine Learning
 scikit-learn
 xgboost
-
-# Dashboard
 streamlit
-dash
-
-# Database
-sqlalchemy
-
-# Utilities
 pyyaml
 python-dateutil
 tqdm
 loguru
-
-# Jupyter
-jupyter
-notebook
-
-# Testing
-pytest
