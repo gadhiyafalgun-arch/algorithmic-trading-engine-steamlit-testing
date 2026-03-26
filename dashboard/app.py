@@ -36,11 +36,56 @@ st.set_page_config(
 )
 
 # ══════════════════════════════════════════════════════════════════════════════
-# CUSTOM CSS — dark, premium, quant-terminal aesthetic
+# CUSTOM CSS — cyberpunk / sci-fi terminal aesthetic (CSS-only, zero lag)
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&family=Exo+2:wght@300;400;600;800&display=swap');
+
+/* ── Keyframes ── */
+@keyframes scanline {
+    0%   { transform: translateY(-100%); }
+    100% { transform: translateY(100vh); }
+}
+@keyframes glow-pulse {
+    0%, 100% { box-shadow: 0 0 6px rgba(88,166,255,0.3), 0 0 12px rgba(88,166,255,0.1); }
+    50%       { box-shadow: 0 0 14px rgba(88,166,255,0.6), 0 0 28px rgba(88,166,255,0.2); }
+}
+@keyframes border-flow {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+@keyframes flicker {
+    0%,100% { opacity: 1; }
+    92%     { opacity: 1; }
+    93%     { opacity: 0.85; }
+    94%     { opacity: 1; }
+    96%     { opacity: 0.9; }
+    97%     { opacity: 1; }
+}
+@keyframes slide-in-left {
+    from { opacity: 0; transform: translateX(-18px); }
+    to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes fade-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes metric-glow {
+    0%,100% { border-color: #1a2332; }
+    50%     { border-color: rgba(88,166,255,0.4); }
+}
+@keyframes top-bar-flow {
+    0%   { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+}
+@keyframes spin-ring {
+    to { transform: rotate(360deg); }
+}
+@keyframes counter-spin {
+    to { transform: rotate(-360deg); }
+}
 
 /* ── Global ── */
 html, body, [class*="css"] {
@@ -49,43 +94,65 @@ html, body, [class*="css"] {
     color: #c9d1d9;
 }
 
+/* Subtle scanline overlay on the whole page — very light, not distracting */
+body::after {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(0,230,118,0.08), transparent);
+    animation: scanline 8s linear infinite;
+    pointer-events: none;
+    z-index: 9999;
+}
+
 /* ── Sidebar ── */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #0d1117 0%, #0a0f1a 100%);
+    background: linear-gradient(180deg, #080c14 0%, #0a0f1a 100%);
     border-right: 1px solid #1a2332;
+    animation: slide-in-left 0.5s ease-out;
 }
 [data-testid="stSidebar"] .stMarkdown h2 {
     font-family: 'Rajdhani', sans-serif;
-    color: #58a6ff;
-    font-size: 1.1rem;
-    letter-spacing: 0.15em;
+    color: #00e676;
+    font-size: 1rem;
+    letter-spacing: 0.2em;
     text-transform: uppercase;
-    border-bottom: 1px solid #1a2332;
+    border-bottom: 1px solid rgba(0,230,118,0.2);
     padding-bottom: 6px;
     margin-bottom: 12px;
+    text-shadow: 0 0 8px rgba(0,230,118,0.4);
 }
 
-/* ── Metric cards ── */
+/* ── Metric cards — animated glow border ── */
 [data-testid="metric-container"] {
-    background: linear-gradient(135deg, #0d1117 0%, #111827 100%);
+    background: linear-gradient(135deg, #0a0f1a 0%, #0d1520 100%);
     border: 1px solid #1a2332;
     border-radius: 8px;
     padding: 14px 18px;
     position: relative;
     overflow: hidden;
+    animation: metric-glow 3s ease-in-out infinite, fade-up 0.6s ease-out;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+[data-testid="metric-container"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(88,166,255,0.15);
 }
 [data-testid="metric-container"]::before {
     content: '';
     position: absolute;
     top: 0; left: 0; right: 0;
     height: 2px;
-    background: linear-gradient(90deg, #58a6ff, #00e676);
+    background: linear-gradient(90deg, #00e676, #58a6ff, #ff9800, #00e676);
+    background-size: 200% 100%;
+    animation: top-bar-flow 3s linear infinite;
 }
 [data-testid="metric-container"] label {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 0.7rem;
-    color: #8b949e;
-    letter-spacing: 0.1em;
+    font-size: 0.68rem;
+    color: #58a6ff;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
 }
 [data-testid="metric-container"] [data-testid="stMetricValue"] {
@@ -93,19 +160,22 @@ html, body, [class*="css"] {
     font-weight: 700;
     font-size: 1.6rem;
     color: #e6edf3;
+    text-shadow: 0 0 10px rgba(88,166,255,0.2);
 }
 
 /* ── Section headers ── */
 .section-header {
     font-family: 'Rajdhani', sans-serif;
-    font-size: 1.15rem;
+    font-size: 1.1rem;
     font-weight: 600;
-    color: #58a6ff;
-    letter-spacing: 0.1em;
+    color: #00e676;
+    letter-spacing: 0.15em;
     text-transform: uppercase;
     padding: 6px 0 6px 12px;
-    border-left: 3px solid #58a6ff;
+    border-left: 3px solid #00e676;
     margin: 24px 0 14px 0;
+    text-shadow: 0 0 8px rgba(0,230,118,0.35);
+    animation: fade-up 0.5s ease-out;
 }
 
 /* ── Grade badge ── */
@@ -117,6 +187,7 @@ html, body, [class*="css"] {
     padding: 8px 28px;
     border-radius: 8px;
     letter-spacing: 0.05em;
+    animation: glow-pulse 2.5s ease-in-out infinite;
 }
 .grade-a-plus { background: linear-gradient(135deg,#0a2a1a,#0d3320); color:#00e676; border:2px solid #00e676; }
 .grade-a      { background: linear-gradient(135deg,#0a2a1a,#0d3320); color:#26c95a; border:2px solid #26c95a; }
@@ -127,58 +198,82 @@ html, body, [class*="css"] {
 
 /* ── Hero banner ── */
 .hero-banner {
-    background: linear-gradient(135deg, #0d1117 0%, #0a0f1a 40%, #0d1a2a 100%);
-    border: 1px solid #1a2332;
+    background: linear-gradient(135deg, #080c14 0%, #0a0f1a 50%, #050810 100%);
+    border: 1px solid rgba(0,230,118,0.2);
     border-radius: 12px;
-    padding: 28px 36px;
+    padding: 32px 40px;
     margin-bottom: 24px;
     position: relative;
     overflow: hidden;
+    animation: fade-up 0.7s ease-out;
+    box-shadow: 0 0 40px rgba(0,230,118,0.04), inset 0 0 60px rgba(0,0,0,0.4);
 }
+/* Animated top border */
 .hero-banner::before {
     content: '';
     position: absolute;
     top: 0; left: 0; right: 0; height: 3px;
-    background: linear-gradient(90deg, #58a6ff 0%, #00e676 50%, #ff9800 100%);
+    background: linear-gradient(90deg, #00e676, #58a6ff, #ff9800, #00e676);
+    background-size: 200% 100%;
+    animation: top-bar-flow 4s linear infinite;
+}
+/* Corner accent top-left */
+.hero-banner::after {
+    content: '';
+    position: absolute;
+    top: 3px; left: 0;
+    width: 60px; height: 60px;
+    border-top: 1px solid rgba(0,230,118,0.3);
+    border-left: 1px solid rgba(0,230,118,0.3);
+    border-radius: 0 0 0 0;
+    pointer-events: none;
 }
 .hero-title {
     font-family: 'Rajdhani', sans-serif;
-    font-size: 2.2rem;
+    font-size: 2.4rem;
     font-weight: 800;
     color: #e6edf3;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
     margin: 0;
     line-height: 1.1;
+    animation: flicker 8s infinite;
+    text-shadow: 0 0 20px rgba(0,230,118,0.1);
 }
 .hero-subtitle {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 0.8rem;
-    color: #58a6ff;
-    letter-spacing: 0.2em;
+    font-size: 0.78rem;
+    color: #00e676;
+    letter-spacing: 0.25em;
     text-transform: uppercase;
-    margin-top: 6px;
+    margin-top: 8px;
+    opacity: 0.8;
 }
 
-/* ── Stat pill ── */
+/* ── Stat pills — animated ── */
 .stat-pill {
     display: inline-block;
-    background: rgba(88,166,255,0.1);
-    border: 1px solid rgba(88,166,255,0.3);
-    border-radius: 20px;
+    background: rgba(0,230,118,0.06);
+    border: 1px solid rgba(0,230,118,0.25);
+    border-radius: 4px;
     padding: 3px 14px;
     font-family: 'Share Tech Mono', monospace;
-    font-size: 0.75rem;
-    color: #58a6ff;
+    font-size: 0.72rem;
+    color: #00e676;
     margin-right: 8px;
     margin-top: 10px;
+    transition: all 0.2s ease;
+}
+.stat-pill:hover {
+    background: rgba(0,230,118,0.15);
+    box-shadow: 0 0 8px rgba(0,230,118,0.2);
 }
 
 /* ── Risk bar label ── */
 .risk-label {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     letter-spacing: 0.1em;
-    color: #8b949e;
+    color: #58a6ff;
     text-transform: uppercase;
 }
 
@@ -189,50 +284,115 @@ html, body, [class*="css"] {
 }
 
 /* ── Divider ── */
-hr { border-color: #1a2332 !important; }
+hr { border-color: rgba(0,230,118,0.1) !important; }
 
-/* ── Plotly chart container ── */
+/* ── Plotly chart container — neon glow border ── */
 .stPlotlyChart {
-    border: 1px solid #1a2332;
+    border: 1px solid rgba(88,166,255,0.2);
     border-radius: 8px;
     overflow: hidden;
+    box-shadow: 0 0 20px rgba(88,166,255,0.05);
+    transition: box-shadow 0.3s ease;
+}
+.stPlotlyChart:hover {
+    box-shadow: 0 0 30px rgba(88,166,255,0.12);
 }
 
-/* ── Spinner ── */
-.stSpinner > div { border-top-color: #58a6ff !important; }
+/* ── Spinner — cyberpunk rings ── */
+.stSpinner > div { border-top-color: #00e676 !important; }
 
 /* ── Selectbox / slider labels ── */
 .stSelectbox label, .stSlider label, .stDateInput label,
 .stMultiSelect label {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 0.72rem;
-    color: #8b949e;
-    letter-spacing: 0.08em;
+    font-size: 0.7rem;
+    color: #58a6ff;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
 }
 
-/* ── Button ── */
+/* ── Button — neon glow on hover ── */
 .stButton > button {
     font-family: 'Rajdhani', sans-serif;
     font-weight: 700;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.15em;
     text-transform: uppercase;
-    background: linear-gradient(135deg, #1a2a4a, #0d1a2a);
-    border: 1px solid #58a6ff;
-    color: #58a6ff;
-    border-radius: 6px;
-    transition: all 0.2s;
+    background: linear-gradient(135deg, #0a1a2a, #050c14);
+    border: 1px solid #00e676;
+    color: #00e676;
+    border-radius: 4px;
+    transition: all 0.25s ease;
+    text-shadow: 0 0 8px rgba(0,230,118,0.4);
 }
 .stButton > button:hover {
-    background: linear-gradient(135deg, #58a6ff, #1a6be0);
-    color: white;
-    border-color: #58a6ff;
+    background: rgba(0,230,118,0.1);
+    box-shadow: 0 0 16px rgba(0,230,118,0.3), inset 0 0 16px rgba(0,230,118,0.05);
+    color: #00e676;
+    border-color: #00e676;
+    transform: translateY(-1px);
 }
 
 /* ── Info / warning boxes ── */
 .stAlert {
-    border-radius: 8px;
+    border-radius: 6px;
     font-family: 'Exo 2', sans-serif;
+    border-left: 3px solid #58a6ff;
+}
+
+/* ── Custom loading screen ── */
+.cyber-loader {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    gap: 24px;
+}
+.cyber-ring-wrap {
+    position: relative;
+    width: 80px; height: 80px;
+}
+.cyber-ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 2px solid transparent;
+}
+.cyber-ring-1 {
+    inset: 0;
+    border-top-color: #00e676;
+    animation: spin-ring 1.2s linear infinite;
+}
+.cyber-ring-2 {
+    inset: 10px;
+    border-right-color: #58a6ff;
+    animation: spin-ring 0.8s linear infinite reverse;
+}
+.cyber-ring-3 {
+    inset: 20px;
+    border-bottom-color: #ff9800;
+    animation: spin-ring 1.6s linear infinite;
+}
+.cyber-ring-dot {
+    position: absolute;
+    inset: 33px;
+    background: #00e676;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #00e676;
+    animation: glow-pulse 1s ease-in-out infinite;
+}
+.cyber-loader-text {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.8rem;
+    color: #00e676;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    animation: flicker 3s infinite;
+}
+.cyber-loader-sub {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+    color: #8b949e;
+    letter-spacing: 0.15em;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -739,13 +899,37 @@ with st.sidebar:
 
 st.markdown("""
 <div class="hero-banner">
-    <div class="hero-title">⚡ ALGORITHMIC TRADING ENGINE</div>
-    <div class="hero-subtitle">Quantitative Strategy Backtester · 3D Interactive Analytics · ML-Ready</div>
-    <span class="stat-pill">5 Strategies</span>
-    <span class="stat-pill">8 Stocks</span>
-    <span class="stat-pill">3D Charts</span>
-    <span class="stat-pill">Live Risk Slider</span>
-    <span class="stat-pill">Real Market Data</span>
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px;">
+        <div>
+            <div class="hero-title">⚡ ALGORITHMIC TRADING ENGINE</div>
+            <div class="hero-subtitle">Quantitative Strategy Backtester · 3D Interactive Analytics · ML-Ready</div>
+            <div style="margin-top:14px;">
+                <span class="stat-pill">5 Strategies</span>
+                <span class="stat-pill">8 Stocks</span>
+                <span class="stat-pill">3D Charts</span>
+                <span class="stat-pill">Live Risk Slider</span>
+                <span class="stat-pill">Real Market Data</span>
+            </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end; padding-top:4px;">
+            <a href="https://github.com/gadhiyafalgun-arch/algorithmic-trading-engine"
+               target="_blank"
+               style="font-family:'Share Tech Mono',monospace; font-size:0.68rem; color:#58a6ff;
+                      text-decoration:none; border:1px solid rgba(88,166,255,0.35);
+                      padding:5px 14px; border-radius:4px; letter-spacing:0.12em;
+                      background:rgba(88,166,255,0.05); white-space:nowrap;">
+               ⌥ SOURCE CODE
+            </a>
+            <a href="https://gadhiyafalgun-arch.github.io/about-me"
+               target="_blank"
+               style="font-family:'Share Tech Mono',monospace; font-size:0.68rem; color:#00e676;
+                      text-decoration:none; border:1px solid rgba(0,230,118,0.35);
+                      padding:5px 14px; border-radius:4px; letter-spacing:0.12em;
+                      background:rgba(0,230,118,0.05); white-space:nowrap;">
+               ◈ PORTFOLIO
+            </a>
+        </div>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -754,18 +938,31 @@ st.markdown("""
 # ══════════════════════════════════════════════════════════════════════════════
 
 if not run_btn and "results" not in st.session_state:
-    st.info("👈  Configure your parameters in the sidebar, then hit **RUN ENGINE** to start.")
     st.markdown("""
-    <div style='padding:24px; background:#0d1117; border:1px solid #1a2332; border-radius:10px; margin-top:20px;'>
-    <h4 style='font-family:Rajdhani,sans-serif;color:#58a6ff;margin:0 0 12px 0;'>What this engine does</h4>
-    <p style='color:#8b949e;font-size:0.9rem;line-height:1.7;'>
-    Fetches real historical market data from Yahoo Finance, computes 8 technical indicators
-    (SMA, EMA, RSI, MACD, Bollinger Bands, ATR, Stochastic, VWAP), applies your chosen trading
-    strategy, and runs a full day-by-day backtest with realistic commission &amp; slippage simulation.<br><br>
-    The <strong style='color:#e6edf3;'>risk slider</strong> re-runs the backtest at 10 different capital
-    allocation levels so you can instantly see how more or less aggressive position sizing changes
-    your returns, drawdown, and Sharpe ratio.
-    </p>
+    <div style='padding:28px 32px; background:linear-gradient(135deg,#080c14,#0a0f1a);
+                border:1px solid rgba(0,230,118,0.15); border-radius:10px; margin-top:4px;
+                position:relative; overflow:hidden;'>
+        <div style='position:absolute; top:0; left:0; right:0; height:1px;
+                    background:linear-gradient(90deg,transparent,rgba(0,230,118,0.4),transparent);'></div>
+        <div style='font-family:Share Tech Mono,monospace; font-size:0.7rem; color:#00e676;
+                    letter-spacing:0.2em; text-transform:uppercase; margin-bottom:14px;
+                    opacity:0.7;'>// SYSTEM READY — AWAITING INPUT</div>
+        <h4 style='font-family:Rajdhani,sans-serif; color:#e6edf3; margin:0 0 12px 0;
+                   font-size:1.1rem; letter-spacing:0.05em;'>What this engine does</h4>
+        <p style='color:#8b949e; font-size:0.88rem; line-height:1.8; margin:0;'>
+        Fetches real historical market data from Yahoo Finance, computes
+        <span style='color:#58a6ff;'>8 technical indicators</span>
+        (SMA, EMA, RSI, MACD, Bollinger Bands, ATR, Stochastic, VWAP), applies your chosen
+        trading strategy, and runs a full day-by-day backtest with realistic commission &amp;
+        slippage simulation.<br><br>
+        The <span style='color:#00e676; font-weight:600;'>risk slider</span> re-runs the backtest
+        at 10 different capital allocation levels — instantly see how aggressive position sizing
+        changes your returns, drawdown, and Sharpe ratio.
+        </p>
+        <div style='margin-top:20px; font-family:Share Tech Mono,monospace; font-size:0.7rem;
+                    color:#58a6ff; letter-spacing:0.1em;'>
+            👈 Configure parameters in the sidebar · Hit <strong style='color:#00e676;'>RUN ENGINE</strong> to start
+        </div>
     </div>
     """, unsafe_allow_html=True)
     st.stop()
@@ -780,8 +977,21 @@ if "results" not in st.session_state or run_btn:
         max_position, risk_per_trade, stop_loss, take_profit,
     )
 
-    with st.spinner(f"Fetching {symbol} data and running engine…"):
-        df = fetch_and_process(symbol, str(start_date), str(end_date))
+    _loader = st.empty()
+    _loader.markdown("""
+    <div class="cyber-loader">
+        <div class="cyber-ring-wrap">
+            <div class="cyber-ring cyber-ring-1"></div>
+            <div class="cyber-ring cyber-ring-2"></div>
+            <div class="cyber-ring cyber-ring-3"></div>
+            <div class="cyber-ring-dot"></div>
+        </div>
+        <div class="cyber-loader-text">⚡ INITIALIZING ENGINE</div>
+        <div class="cyber-loader-sub">FETCHING MARKET DATA · COMPUTING INDICATORS · RUNNING BACKTESTS</div>
+    </div>
+    """, unsafe_allow_html=True)
+    df = fetch_and_process(symbol, str(start_date), str(end_date))
+    _loader.empty()
 
     if df.empty:
         st.error(f"Could not fetch data for {symbol}. Try a different symbol or date range.")
@@ -791,12 +1001,25 @@ if "results" not in st.session_state or run_btn:
         st.warning(f"Strategy **{strategy_name}** generated no signals for {symbol} in this date range. Try a different combination.")
         st.stop()
 
-    with st.spinner("Running backtests across all risk levels…"):
-        risk_results = {}
-        for mult in RISK_MULTIPLIERS:
-            res = run_backtest_at_risk(df, signal_col, config, mult)
-            if res:
-                risk_results[mult] = res
+    _loader2 = st.empty()
+    _loader2.markdown("""
+    <div class="cyber-loader">
+        <div class="cyber-ring-wrap">
+            <div class="cyber-ring cyber-ring-1"></div>
+            <div class="cyber-ring cyber-ring-2"></div>
+            <div class="cyber-ring cyber-ring-3"></div>
+            <div class="cyber-ring-dot"></div>
+        </div>
+        <div class="cyber-loader-text">⚡ RUNNING BACKTESTS</div>
+        <div class="cyber-loader-sub">SIMULATING 10 RISK LEVELS · COMPUTING PERFORMANCE METRICS</div>
+    </div>
+    """, unsafe_allow_html=True)
+    risk_results = {}
+    for mult in RISK_MULTIPLIERS:
+        res = run_backtest_at_risk(df, signal_col, config, mult)
+        if res:
+            risk_results[mult] = res
+    _loader2.empty()
 
     if not risk_results:
         st.error("Backtest produced no results. Try adjusting your parameters.")
