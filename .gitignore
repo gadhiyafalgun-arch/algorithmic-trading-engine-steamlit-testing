@@ -1,32 +1,9 @@
-# Virtual Environment
-venv/
-.venv/
-
-# Python
 __pycache__/
 *.pyc
-*.pyo
-.pytest_cache/
-
-# Data (don't upload large data to GitHub)
-data/raw/
-data/cache/
-
-# Logs
-logs/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
 .DS_Store
-Thumbs.db
 
-# Jupyter
-.ipynb_checkpoints/
-
-# Environment
+.venv/
+venv/
 .env
+
+.streamlit/secrets.toml
