@@ -1,10 +1,9 @@
 """
-Algorithmic Trading Engine — Interactive Dashboard
-====================================================
-A stunning interactive dashboard showcasing a complete
-algorithmic trading system built from scratch.
-
-Run with: streamlit run dashboard/app.py
+Algorithmic Trading Engine — Live Dashboard
+=============================================
+Streamlit web app that runs the full trading engine live.
+Visitors can select stocks, strategies, date ranges, and drag
+the risk slider to see how results change in real time.
 """
 
 import streamlit as st
@@ -12,1252 +11,964 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import yfinance as yf
+import sys
 import os
+from datetime import datetime, date
 
-# ==========================================
-# PAGE CONFIG — must be first Streamlit call
-# ==========================================
+# ── Make src/ importable from dashboard/ ──────────────────────────────────────
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+from src.indicators import TechnicalIndicators
+from src.strategy import TradingStrategy
+from src.backtester import Backtester
+from src.performance import PerformanceAnalyzer
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE CONFIG
+# ══════════════════════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="Algo Trading Engine | Dashboard",
-    page_icon="🤖",
+    page_title="Algorithmic Trading Engine",
+    page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# ==========================================
-# DATA PATH
-# ==========================================
-# Works both locally and on Streamlit Cloud
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, "data", "dashboard")
-SYMBOLS = ["AAPL", "GOOGL", "MSFT", "AMZN", "TSLA", "SPY"]
+# ══════════════════════════════════════════════════════════════════════════════
+# CUSTOM CSS — dark, premium, quant-terminal aesthetic
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&family=Exo+2:wght@300;400;600;800&display=swap');
 
+/* ── Global ── */
+html, body, [class*="css"] {
+    font-family: 'Exo 2', sans-serif;
+    background-color: #080c14;
+    color: #c9d1d9;
+}
 
-# ==========================================
-# CUSTOM CSS — Dark Trading Terminal Theme
-# ==========================================
-def inject_css():
-    st.markdown("""
-    <style>
-        /* ===== GLOBAL ===== */
-        .stApp {
-            background-color: #0a0e17;
-        }
+/* ── Sidebar ── */
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0d1117 0%, #0a0f1a 100%);
+    border-right: 1px solid #1a2332;
+}
+[data-testid="stSidebar"] .stMarkdown h2 {
+    font-family: 'Rajdhani', sans-serif;
+    color: #58a6ff;
+    font-size: 1.1rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    border-bottom: 1px solid #1a2332;
+    padding-bottom: 6px;
+    margin-bottom: 12px;
+}
 
-        /* Sidebar */
-        section[data-testid="stSidebar"] {
-            background-color: #0d1117;
-            border-right: 1px solid #1a2332;
-        }
+/* ── Metric cards ── */
+[data-testid="metric-container"] {
+    background: linear-gradient(135deg, #0d1117 0%, #111827 100%);
+    border: 1px solid #1a2332;
+    border-radius: 8px;
+    padding: 14px 18px;
+    position: relative;
+    overflow: hidden;
+}
+[data-testid="metric-container"]::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #58a6ff, #00e676);
+}
+[data-testid="metric-container"] label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.7rem;
+    color: #8b949e;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+[data-testid="metric-container"] [data-testid="stMetricValue"] {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: 1.6rem;
+    color: #e6edf3;
+}
 
-        /* ===== HERO SECTION ===== */
-        .hero-container {
-            text-align: center;
-            padding: 40px 20px 20px 20px;
-        }
+/* ── Section headers ── */
+.section-header {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #58a6ff;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 6px 0 6px 12px;
+    border-left: 3px solid #58a6ff;
+    margin: 24px 0 14px 0;
+}
 
-        .hero-title {
-            font-size: 52px;
-            font-weight: 800;
-            background: linear-gradient(135deg, #00e676 0%, #00bcd4 50%, #2196f3 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 8px;
-            letter-spacing: -1px;
-        }
+/* ── Grade badge ── */
+.grade-badge {
+    display: inline-block;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 2.4rem;
+    font-weight: 800;
+    padding: 8px 28px;
+    border-radius: 8px;
+    letter-spacing: 0.05em;
+}
+.grade-a-plus { background: linear-gradient(135deg,#0a2a1a,#0d3320); color:#00e676; border:2px solid #00e676; }
+.grade-a      { background: linear-gradient(135deg,#0a2a1a,#0d3320); color:#26c95a; border:2px solid #26c95a; }
+.grade-b      { background: linear-gradient(135deg,#1a1a0a,#25250d); color:#ffd60a; border:2px solid #ffd60a; }
+.grade-c      { background: linear-gradient(135deg,#1a100a,#251a0d); color:#ff9800; border:2px solid #ff9800; }
+.grade-d      { background: linear-gradient(135deg,#1a0a0a,#25100d); color:#ff5722; border:2px solid #ff5722; }
+.grade-f      { background: linear-gradient(135deg,#1a0a0a,#250d0d); color:#ff1744; border:2px solid #ff1744; }
 
-        .hero-subtitle {
-            font-size: 18px;
-            color: #6c7a89;
-            margin-bottom: 30px;
-            font-weight: 300;
-        }
+/* ── Hero banner ── */
+.hero-banner {
+    background: linear-gradient(135deg, #0d1117 0%, #0a0f1a 40%, #0d1a2a 100%);
+    border: 1px solid #1a2332;
+    border-radius: 12px;
+    padding: 28px 36px;
+    margin-bottom: 24px;
+    position: relative;
+    overflow: hidden;
+}
+.hero-banner::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; height: 3px;
+    background: linear-gradient(90deg, #58a6ff 0%, #00e676 50%, #ff9800 100%);
+}
+.hero-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 2.2rem;
+    font-weight: 800;
+    color: #e6edf3;
+    letter-spacing: 0.05em;
+    margin: 0;
+    line-height: 1.1;
+}
+.hero-subtitle {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.8rem;
+    color: #58a6ff;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-top: 6px;
+}
 
-        .hero-subtitle span {
-            color: #00e676;
-            font-weight: 600;
-        }
+/* ── Stat pill ── */
+.stat-pill {
+    display: inline-block;
+    background: rgba(88,166,255,0.1);
+    border: 1px solid rgba(88,166,255,0.3);
+    border-radius: 20px;
+    padding: 3px 14px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.75rem;
+    color: #58a6ff;
+    margin-right: 8px;
+    margin-top: 10px;
+}
 
-        /* ===== STAT CARDS ===== */
-        .stat-row {
-            display: flex;
-            justify-content: center;
-            gap: 16px;
-            flex-wrap: wrap;
-            margin: 20px 0 30px 0;
-        }
+/* ── Risk bar label ── */
+.risk-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    color: #8b949e;
+    text-transform: uppercase;
+}
 
-        .stat-card {
-            background: linear-gradient(135deg, #111827 0%, #1a2332 100%);
-            border: 1px solid #1e2d3d;
-            border-radius: 12px;
-            padding: 20px 28px;
-            text-align: center;
-            min-width: 160px;
-            transition: transform 0.2s, border-color 0.2s;
-        }
+/* ── Trade table ── */
+.trade-table {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.78rem;
+}
 
-        .stat-card:hover {
-            transform: translateY(-3px);
-            border-color: #00e676;
-        }
+/* ── Divider ── */
+hr { border-color: #1a2332 !important; }
 
-        .stat-number {
-            font-size: 32px;
-            font-weight: 800;
-            color: #00e676;
-            line-height: 1.2;
-        }
+/* ── Plotly chart container ── */
+.stPlotlyChart {
+    border: 1px solid #1a2332;
+    border-radius: 8px;
+    overflow: hidden;
+}
 
-        .stat-number.blue { color: #2196f3; }
-        .stat-number.cyan { color: #00bcd4; }
-        .stat-number.orange { color: #ff9800; }
-        .stat-number.purple { color: #9c27b0; }
+/* ── Spinner ── */
+.stSpinner > div { border-top-color: #58a6ff !important; }
 
-        .stat-label {
-            font-size: 13px;
-            color: #6c7a89;
-            margin-top: 4px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
+/* ── Selectbox / slider labels ── */
+.stSelectbox label, .stSlider label, .stDateInput label,
+.stMultiSelect label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72rem;
+    color: #8b949e;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
 
-        /* ===== SECTION HEADERS ===== */
-        .section-header {
-            font-size: 28px;
-            font-weight: 700;
-            color: #e2e8f0;
-            margin: 40px 0 8px 0;
-            padding-bottom: 8px;
-            border-bottom: 2px solid #1a2332;
-        }
+/* ── Button ── */
+.stButton > button {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: linear-gradient(135deg, #1a2a4a, #0d1a2a);
+    border: 1px solid #58a6ff;
+    color: #58a6ff;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+.stButton > button:hover {
+    background: linear-gradient(135deg, #58a6ff, #1a6be0);
+    color: white;
+    border-color: #58a6ff;
+}
 
-        .section-subtext {
-            color: #6c7a89;
-            font-size: 15px;
-            margin-bottom: 24px;
-        }
+/* ── Info / warning boxes ── */
+.stAlert {
+    border-radius: 8px;
+    font-family: 'Exo 2', sans-serif;
+}
+</style>
+""", unsafe_allow_html=True)
 
-        /* ===== NAVIGATION ===== */
-        .nav-header {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            color: #4a5568;
-            margin-bottom: 8px;
-            font-weight: 600;
-        }
+# ══════════════════════════════════════════════════════════════════════════════
+# CONSTANTS
+# ══════════════════════════════════════════════════════════════════════════════
+SYMBOLS = ["AAPL", "GOOGL", "MSFT", "AMZN", "TSLA", "SPY", "NVDA", "META"]
+STRATEGIES = {
+    "Combined (Multi-Signal)": "combined_signal",
+    "SMA Crossover":           "sma_signal",
+    "RSI (Trend-Aware)":       "rsi_signal",
+    "MACD (Filtered)":         "macd_trade_signal",
+    "Bollinger Bands":         "bb_signal",
+}
+RISK_MULTIPLIERS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0]
 
-        /* ===== DIVIDER ===== */
-        .glow-divider {
-            height: 1px;
-            background: linear-gradient(90deg, transparent, #00e676, transparent);
-            border: none;
-            margin: 30px 0;
-        }
+# ══════════════════════════════════════════════════════════════════════════════
+# HELPERS
+# ══════════════════════════════════════════════════════════════════════════════
 
-        /* ===== FOOTER ===== */
-        .footer {
-            text-align: center;
-            color: #4a5568;
-            font-size: 13px;
-            padding: 40px 0 20px 0;
-            border-top: 1px solid #1a2332;
-            margin-top: 60px;
-        }
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_and_process(symbol: str, start: str, end: str) -> pd.DataFrame:
+    """Fetch from yfinance, clean, add indicators + strategies. Cached 1 hr."""
+    ticker = yf.Ticker(symbol)
+    df = ticker.history(start=start, end=end, interval="1d")
+    if df.empty:
+        return pd.DataFrame()
 
-        .footer a {
-            color: #00e676;
-            text-decoration: none;
-        }
+    df.columns = [c.lower().replace(" ", "_") for c in df.columns]
+    needed = ["open", "high", "low", "close", "volume"]
+    df = df[[c for c in needed if c in df.columns]]
+    df = df[df["close"] > 0].dropna()
 
-        /* ===== HIDE STREAMLIT DEFAULTS ===== */
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
+    # daily return (needed by backtester portfolio tracking)
+    df["daily_return"] = df["close"].pct_change()
 
-        /* ===== SIDEBAR RADIO STYLING ===== */
-        div[data-testid="stSidebar"] .stRadio > label {
-            display: none;
-        }
+    ti = TechnicalIndicators()
+    df = ti.add_all_indicators(df)
 
-        div[data-testid="stSidebar"] .stRadio > div {
-            gap: 2px;
-        }
+    strat = TradingStrategy()
+    df = strat.apply_all_strategies(df)
 
-        div[data-testid="stSidebar"] .stRadio > div > label {
-            background: transparent;
-            border: 1px solid transparent;
-            border-radius: 8px;
-            padding: 8px 16px;
-            color: #8892b0;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-size: 14px;
-        }
-
-        div[data-testid="stSidebar"] .stRadio > div > label:hover {
-            background: #111827;
-            border-color: #1e2d3d;
-            color: #e2e8f0;
-        }
-
-        div[data-testid="stSidebar"] .stRadio > div > label[data-checked="true"] {
-            background: linear-gradient(135deg, #0d2818 0%, #0a1628 100%);
-            border-color: #00e676;
-            color: #00e676;
-            font-weight: 600;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
-
-# ==========================================
-# CACHED DATA LOADING
-# ==========================================
-@st.cache_data
-def load_stock_data(symbol):
-    """Load pre-computed data for a single stock."""
-    filepath = os.path.join(DATA_DIR, f"{symbol}.csv")
-    df = pd.read_csv(filepath, parse_dates=["date"])
-    df = df.set_index("date")
-    df.index = df.index.tz_localize(None)  # Strip any timezone
     return df
 
 
-@st.cache_data
-def load_all_stocks():
-    """Load all stocks into a dictionary."""
-    data = {}
-    for symbol in SYMBOLS:
-        try:
-            data[symbol] = load_stock_data(symbol)
-        except Exception as e:
-            st.error(f"Failed to load {symbol}: {e}")
-    return data
-
-
-# ==========================================
-# HERO SECTION
-# ==========================================
-def render_hero():
-    """Render the hero section with key stats."""
-    st.markdown("""
-    <div class="hero-container">
-        <div class="hero-title">🤖 Algorithmic Trading Engine</div>
-        <div class="hero-subtitle">
-            A complete quantitative trading system built from scratch —
-            <span>data pipeline → indicators → strategies → backtesting → ML → risk management</span>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Key stats row
-    st.markdown("""
-    <div class="stat-row">
-        <div class="stat-card">
-            <div class="stat-number">6</div>
-            <div class="stat-label">Stocks Tracked</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-number blue">5</div>
-            <div class="stat-label">Trading Strategies</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-number cyan">8</div>
-            <div class="stat-label">Technical Indicators</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-number orange">3</div>
-            <div class="stat-label">ML Models</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-number purple">1,257</div>
-            <div class="stat-label">Trading Days</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-number">\$100K</div>
-            <div class="stat-label">Initial Capital</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
-
-
-# ==========================================
-# PLACEHOLDER SECTIONS (built in later steps)
-# ==========================================
-def render_story():
-    st.markdown('<div class="section-header">📖 The Story</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-subtext">Every strategy failed. Here\'s how I found out why — and fixed all of them.</div>', unsafe_allow_html=True)
-
-    # ===== ACT 1: THE FAILURE =====
-    st.markdown("""
-    <div style="
-        background: linear-gradient(135deg, #1a0a0a 0%, #1a1a2e 100%);
-        border: 1px solid #3d1515;
-        border-left: 4px solid #ff1744;
-        border-radius: 12px;
-        padding: 28px;
-        margin-bottom: 24px;
-    ">
-        <div style="font-size: 22px; font-weight: 700; color: #ff1744; margin-bottom: 12px;">
-            💀 Act 1: Total Failure
-        </div>
-        <div style="color: #c0c0c0; font-size: 15px; line-height: 1.8;">
-            I built 5 trading strategies from scratch — SMA Crossover, RSI, MACD, Bollinger Bands, 
-            and a Combined strategy. Ran them through a full backtest on AAPL from 2020-2024 with \$100,000.<br><br>
-            <b style="color: #ff1744;">Every single strategy got an F grade.</b> 
-            The portfolio was losing money. Not just underperforming — actively destroying capital.
-            Commission costs alone ate 28-33% of all gains. Something was fundamentally broken.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Failure metrics row
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.markdown("""
-        <div class="stat-card">
-            <div class="stat-number" style="color: #ff1744;">F</div>
-            <div class="stat-label">Strategy Grades</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col2:
-        st.markdown("""
-        <div class="stat-card">
-            <div class="stat-number" style="color: #ff1744;">-33%</div>
-            <div class="stat-label">Lost to Commissions</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col3:
-        st.markdown("""
-        <div class="stat-card">
-            <div class="stat-number" style="color: #ff1744;">28%</div>
-            <div class="stat-label">Whipsaw Rate</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col4:
-        st.markdown("""
-        <div class="stat-card">
-            <div class="stat-number" style="color: #ff1744;">0-20%</div>
-            <div class="stat-label">Trend Alignment</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ===== ACT 2: THE DIAGNOSIS =====
-    st.markdown("""
-    <div style="
-        background: linear-gradient(135deg, #0a1a1a 0%, #1a1a2e 100%);
-        border: 1px solid #1a3d3d;
-        border-left: 4px solid #ff9800;
-        border-radius: 12px;
-        padding: 28px;
-        margin-bottom: 24px;
-    ">
-        <div style="font-size: 22px; font-weight: 700; color: #ff9800; margin-bottom: 12px;">
-            🔬 Act 2: The Diagnosis
-        </div>
-        <div style="color: #c0c0c0; font-size: 15px; line-height: 1.8;">
-            Instead of tweaking parameters randomly, I built a <b style="color: #ff9800;">diagnostic tool</b> 
-            — an X-ray machine for trading strategies. It analyzed every signal, every trade, every dollar lost. 
-            It found <b>5 critical problems</b> that were killing performance:
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # 5 Problems - expandable
-    problems = [
-        {
-            "icon": "💸",
-            "title": "Commission Death",
-            "severity": "CRITICAL",
-            "color": "#ff1744",
-            "detail": "28-33% of all gains eaten by trading costs. The strategies were over-trading — generating hundreds of signals that triggered tiny trades, each one paying commission. Death by a thousand cuts.",
-            "metric_before": "28-33% commission drag",
-            "metric_after": "3-5% commission drag",
+def build_mock_config(
+    initial_capital: float,
+    commission: float,
+    slippage: float,
+    max_position: float,
+    risk_per_trade: float,
+    stop_loss: float,
+    take_profit: float,
+    max_drawdown: float = 0.15,
+    max_positions: int = 5,
+) -> dict:
+    """Build a config dict that Backtester can use."""
+    return {
+        "trading": {
+            "initial_capital": initial_capital,
+            "commission": commission / 100,
+            "slippage": slippage / 100,
+            "max_position_size": max_position / 100,
+            "risk_per_trade": risk_per_trade / 100,
         },
-        {
-            "icon": "📉",
-            "title": "Bad Sell Timing",
-            "severity": "HIGH",
-            "color": "#ff5722",
-            "detail": "Strategies were selling during a bull market. AAPL went up 246% in this period, but the strategies kept triggering sell signals during uptrends. Selling winners and holding losers.",
-            "metric_before": "Selling in uptrends",
-            "metric_after": "Strict sell conditions only",
+        "risk": {
+            "stop_loss": stop_loss / 100,
+            "take_profit": take_profit / 100,
+            "max_drawdown": max_drawdown,
+            "max_open_positions": max_positions,
         },
-        {
-            "icon": "🔄",
-            "title": "Whipsaw Chaos",
-            "severity": "HIGH",
-            "color": "#ff9800",
-            "detail": "20-28% of all signals were rapid flips — BUY today, SELL tomorrow, BUY the next day. Each flip costs commission and locks in small losses. The signal noise was drowning out real opportunities.",
-            "metric_before": "20-28% whipsaw rate",
-            "metric_after": "0% whipsaw rate",
-        },
-        {
-            "icon": "🔀",
-            "title": "RSI Running Backwards",
-            "severity": "MEDIUM",
-            "color": "#ffc107",
-            "detail": "RSI was buying 'oversold' bounces during downtrends — catching falling knives. Only 0-20% of RSI signals aligned with the actual market trend. The indicator was technically correct but strategically useless.",
-            "metric_before": "0-20% trend alignment",
-            "metric_after": "100% trend alignment",
-        },
-        {
-            "icon": "🙈",
-            "title": "No Trend Filter",
-            "severity": "MEDIUM",
-            "color": "#8bc34a",
-            "detail": "None of the strategies checked whether the market was in a bull or bear trend before trading. They were flying blind — buying in downtrends, selling in uptrends, with no context about market conditions.",
-            "metric_before": "No trend awareness",
-            "metric_after": "SMA 200 trend filter on all",
-        },
-    ]
-
-    for i, p in enumerate(problems):
-        with st.expander(f"{p['icon']}  Problem {i+1}: {p['title']}  —  Severity: {p['severity']}", expanded=(i == 0)):
-            st.markdown(f"""
-            <div style="
-                background: #111827;
-                border-radius: 8px;
-                padding: 20px;
-                border-left: 3px solid {p['color']};
-            ">
-                <div style="color: #c0c0c0; font-size: 14px; line-height: 1.8; margin-bottom: 16px;">
-                    {p['detail']}
-                </div>
-                <div style="display: flex; gap: 20px;">
-                    <div style="
-                        flex: 1; background: #1a0a0a; border: 1px solid #3d1515;
-                        border-radius: 8px; padding: 12px; text-align: center;
-                    ">
-                        <div style="font-size: 11px; color: #ff1744; text-transform: uppercase; letter-spacing: 1px;">Before</div>
-                        <div style="font-size: 16px; color: #ff1744; font-weight: 600; margin-top: 4px;">{p['metric_before']}</div>
-                    </div>
-                    <div style="
-                        flex: 1; background: #0a1a0a; border: 1px solid #153d15;
-                        border-radius: 8px; padding: 12px; text-align: center;
-                    ">
-                        <div style="font-size: 11px; color: #00e676; text-transform: uppercase; letter-spacing: 1px;">After</div>
-                        <div style="font-size: 16px; color: #00e676; font-weight: 600; margin-top: 4px;">{p['metric_after']}</div>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ===== ACT 3: THE FIX =====
-    st.markdown("""
-    <div style="
-        background: linear-gradient(135deg, #0a1a0a 0%, #1a1a2e 100%);
-        border: 1px solid #153d15;
-        border-left: 4px solid #00e676;
-        border-radius: 12px;
-        padding: 28px;
-        margin-bottom: 24px;
-    ">
-        <div style="font-size: 22px; font-weight: 700; color: #00e676; margin-bottom: 12px;">
-            ✅ Act 3: The Fix — Strategy v2.1
-        </div>
-        <div style="color: #c0c0c0; font-size: 15px; line-height: 1.8;">
-            I redesigned all 5 strategies with systematic fixes. Not random parameter tuning — 
-            <b style="color: #00e676;">targeted engineering</b> based on the diagnostic findings:
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Fixes applied
-    fixes = [
-        {"icon": "📊", "name": "SMA 200 Trend Filter", "desc": "Only buy when price is ABOVE the 200-day moving average. Forces alignment with the long-term trend. Simple physics: don't swim against the current."},
-        {"icon": "⏱️", "name": "Cooldown Periods", "desc": "10-15 bar minimum between signals. Eliminates whipsaw by enforcing a waiting period after each trade. Like a refractory period in neural firing."},
-        {"icon": "🎯", "name": "Trend-Aware RSI", "desc": "RSI now only triggers buys during confirmed uptrends (buying dips), not random oversold bounces. Context-dependent signal interpretation."},
-        {"icon": "🔍", "name": "Lookback Window", "desc": "Combined strategy uses a 5-bar lookback window — requires 2+ strategies to agree within 5 days, not just on the same bar. Reduces noise, increases conviction."},
-        {"icon": "🚪", "name": "Strict Sell Conditions", "desc": "Sells only trigger on strong reversal signals, not minor fluctuations. Lets winners run instead of cutting them at the first dip."},
-    ]
-
-    fix_cols = st.columns(len(fixes))
-    for col, fix in zip(fix_cols, fixes):
-        with col:
-            st.markdown(f"""
-            <div style="
-                background: linear-gradient(135deg, #111827 0%, #0d1a0d 100%);
-                border: 1px solid #1e2d3d;
-                border-radius: 10px;
-                padding: 16px;
-                height: 220px;
-                transition: border-color 0.2s;
-            ">
-                <div style="font-size: 28px; margin-bottom: 8px;">{fix['icon']}</div>
-                <div style="color: #00e676; font-weight: 600; font-size: 14px; margin-bottom: 8px;">{fix['name']}</div>
-                <div style="color: #8892b0; font-size: 12px; line-height: 1.6;">{fix['desc']}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ===== BEFORE vs AFTER TABLE =====
-    st.markdown("""
-    <div style="font-size: 20px; font-weight: 700; color: #e2e8f0; margin: 20px 0 16px 0;">
-        📋 Before vs After — Full Comparison
-    </div>
-    """, unsafe_allow_html=True)
-
-    comparison_data = {
-        "Metric": [
-            "Trend Alignment",
-            "Whipsaw Rate",
-            "Commission Drag",
-            "RSI Accuracy",
-            "Trend Filter",
-            "Portfolio Result",
-        ],
-        "❌ Before (v1)": [
-            "0-20%",
-            "20-28%",
-            "28-33%",
-            "Buying against trend",
-            "None",
-            "📉 Net Loss",
-        ],
-        "✅ After (v2.1)": [
-            "100%",
-            "0%",
-            "3-5%",
-            "Buying with trend",
-            "SMA 200 on all",
-            "📈 Profitable",
-        ],
-        "Improvement": [
-            "🟢 +80-100%",
-            "🟢 -28%",
-            "🟢 -28%",
-            "🟢 Fixed",
-            "🟢 Added",
-            "🟢 Loss → Profit",
-        ],
     }
 
-    comparison_df = pd.DataFrame(comparison_data)
-    st.dataframe(
-        comparison_df,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Metric": st.column_config.TextColumn("Metric", width="medium"),
-            "❌ Before (v1)": st.column_config.TextColumn("❌ Before (v1)", width="medium"),
-            "✅ After (v2.1)": st.column_config.TextColumn("✅ After (v2.1)", width="medium"),
-            "Improvement": st.column_config.TextColumn("Improvement", width="medium"),
-        }
+
+class DashboardBacktester(Backtester):
+    """Backtester that takes a config dict instead of reading a yaml file."""
+    def __init__(self, config: dict):
+        self.config = config
+        t = config["trading"]
+        r = config["risk"]
+        self.initial_capital   = t["initial_capital"]
+        self.commission_rate   = t["commission"]
+        self.slippage_rate     = t["slippage"]
+        self.max_position_size = t["max_position_size"]
+        self.risk_per_trade    = t["risk_per_trade"]
+        self.stop_loss_pct     = r["stop_loss"]
+        self.take_profit_pct   = r["take_profit"]
+        self.max_drawdown_limit = r["max_drawdown"]
+        self.max_open_positions = r["max_open_positions"]
+
+
+def run_backtest_at_risk(df, signal_col, config, risk_mult):
+    """Run backtest at a given risk multiplier."""
+    cfg = {
+        "trading": {
+            "initial_capital":   config["trading"]["initial_capital"],
+            "commission":        config["trading"]["commission"],
+            "slippage":          config["trading"]["slippage"],
+            "max_position_size": min(config["trading"]["max_position_size"] * risk_mult, 0.95),
+            "risk_per_trade":    min(config["trading"]["risk_per_trade"] * risk_mult, 0.20),
+        },
+        "risk": config["risk"],
+    }
+    bt = DashboardBacktester(cfg)
+    results = bt.run(df, signal_column=signal_col, symbol="STOCK")
+    if results:
+        results["risk_multiplier"] = risk_mult
+        results["position_size_pct"] = cfg["trading"]["max_position_size"] * 100
+    return results
+
+
+def grade_color(grade: str) -> str:
+    if "A+" in grade: return "grade-a-plus"
+    if grade.startswith("A"):  return "grade-a"
+    if grade.startswith("B"):  return "grade-b"
+    if grade.startswith("C"):  return "grade-c"
+    if grade.startswith("D"):  return "grade-d"
+    return "grade-f"
+
+
+def fmt_pct(v, decimals=2):
+    sign = "+" if v >= 0 else ""
+    return f"{sign}{v:.{decimals}f}%"
+
+
+def fmt_dollar(v):
+    return f"${v:,.2f}"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CHART BUILDERS (Plotly, dark theme)
+# ══════════════════════════════════════════════════════════════════════════════
+
+DARK = dict(
+    paper_bgcolor="#0d1117",
+    plot_bgcolor="#0d1117",
+    font=dict(color="#c9d1d9", family="Exo 2, sans-serif"),
+)
+
+
+def chart_price_signals(df: pd.DataFrame, symbol: str, signal_col: str) -> go.Figure:
+    """3D price + volume + buy/sell signals."""
+    days = np.arange(len(df), dtype=float)
+    prices = df["close"].values
+    vols = df["volume"].values
+    vol_norm = vols / vols.max() * prices.max() * 0.25
+    dates = [str(d)[:10] for d in df.index]
+
+    fig = go.Figure()
+
+    # Price line
+    fig.add_trace(go.Scatter3d(
+        x=days, y=prices, z=vol_norm,
+        mode="lines",
+        line=dict(color="#00e676", width=3),
+        name="Price",
+        text=dates,
+        hovertemplate="Date: %{text}<br>Price: $%{y:.2f}<extra></extra>",
+    ))
+
+    # SMA overlays
+    for col, color, label in [("sma_20","#ff9800","SMA 20"),("sma_50","#2196f3","SMA 50")]:
+        if col in df.columns:
+            fig.add_trace(go.Scatter3d(
+                x=days, y=df[col].values, z=np.zeros_like(days),
+                mode="lines", line=dict(color=color, width=2, dash="dot"),
+                name=label, opacity=0.7,
+            ))
+
+    # Volume dots on floor
+    vol_colors = ["#26a69a" if c >= o else "#ef5350"
+                  for c, o in zip(df["close"], df["open"])]
+    fig.add_trace(go.Scatter3d(
+        x=days, y=np.full_like(days, prices.min()*0.96), z=vol_norm,
+        mode="markers", marker=dict(size=2, color=vol_colors, opacity=0.35),
+        name="Volume", hoverinfo="skip",
+    ))
+
+    # BUY signals
+    buys = df[df[signal_col] == 1]
+    if len(buys):
+        bi = [df.index.get_loc(i) for i in buys.index]
+        fig.add_trace(go.Scatter3d(
+            x=np.array(bi, dtype=float), y=buys["close"].values,
+            z=buys["volume"].values / vols.max() * prices.max() * 0.25,
+            mode="markers",
+            marker=dict(size=8, color="#00e676", symbol="diamond",
+                        line=dict(width=2, color="white")),
+            name="BUY ▲",
+            text=[str(d)[:10] for d in buys.index],
+            hovertemplate="BUY %{text}<br>$%{y:.2f}<extra></extra>",
+        ))
+
+    # SELL signals
+    sells = df[df[signal_col] == -1]
+    if len(sells):
+        si = [df.index.get_loc(i) for i in sells.index]
+        fig.add_trace(go.Scatter3d(
+            x=np.array(si, dtype=float), y=sells["close"].values,
+            z=sells["volume"].values / vols.max() * prices.max() * 0.25,
+            mode="markers",
+            marker=dict(size=8, color="#ff1744", symbol="diamond",
+                        line=dict(width=2, color="white")),
+            name="SELL ▼",
+            text=[str(d)[:10] for d in sells.index],
+            hovertemplate="SELL %{text}<br>$%{y:.2f}<extra></extra>",
+        ))
+
+    fig.update_layout(
+        **DARK,
+        title=dict(text=f"⚡ {symbol} — Price, Volume & Trade Signals (3D)",
+                   font=dict(size=16, color="#e6edf3", family="Rajdhani, sans-serif"),
+                   x=0.5, xanchor="center"),
+        height=620,
+        scene=dict(
+            xaxis=dict(title="Trading Days", gridcolor="#21262d", backgroundcolor="#0d1117", color="#8b949e"),
+            yaxis=dict(title="Price ($)",    gridcolor="#21262d", backgroundcolor="#0d1117", color="#8b949e"),
+            zaxis=dict(title="Volume",       gridcolor="#21262d", backgroundcolor="#0d1117", color="#8b949e"),
+            bgcolor="#0d1117",
+            camera=dict(eye=dict(x=1.8, y=-1.4, z=0.8)),
+        ),
+        legend=dict(bgcolor="rgba(13,17,23,0.8)", bordercolor="#21262d", borderwidth=1),
+        margin=dict(l=0, r=0, t=50, b=0),
+    )
+    return fig
+
+
+def chart_equity_risk(risk_results: dict, initial_capital: float,
+                      symbol: str, strategy: str, active_mult: float) -> go.Figure:
+    """3D equity curves for all risk levels — visibility toggled by slider."""
+    sorted_levels = sorted(risk_results.keys())
+
+    def risk_color(mult):
+        lo, hi = sorted_levels[0], sorted_levels[-1]
+        ratio = (mult - lo) / (hi - lo) if hi > lo else 0
+        r = int(min(255, 80  + ratio * 175))
+        g = int(max(0,   230 - ratio * 200))
+        b = int(max(0,   118 - ratio * 118))
+        return f"rgb({r},{g},{b})"
+
+    fig = go.Figure()
+    traces_per = 3
+    default_idx = sorted_levels.index(active_mult) if active_mult in sorted_levels else \
+                  sorted_levels.index(min(sorted_levels, key=lambda x: abs(x-1.0)))
+
+    for idx, mult in enumerate(sorted_levels):
+        res = risk_results[mult]
+        pdf = res["portfolio_history"]
+        days = np.arange(len(pdf), dtype=float)
+        vals = pdf["total_value"].values
+        rets = pdf["daily_return"].fillna(0).values * 100
+        color = risk_color(mult)
+        vis = (idx == default_idx)
+        pos_pct = res.get("position_size_pct", 0)
+        final = res.get("final_value", 0)
+        ret_pct = res.get("total_return", 0) * 100
+        dates = [str(d)[:10] for d in pdf.index]
+
+        fig.add_trace(go.Scatter3d(
+            x=days, y=vals, z=rets,
+            mode="lines", line=dict(color=color, width=5),
+            name=f"Risk {mult:.2f}×",
+            visible=vis,
+            text=dates,
+            hovertemplate=(
+                f"<b>Risk {mult:.2f}× | Pos: {pos_pct:.0f}%</b><br>"
+                "Date: %{text}<br>Value: $%{y:,.0f}<br>Daily Ret: %{z:.2f}%<extra></extra>"
+            ),
+        ))
+        fig.add_trace(go.Scatter3d(
+            x=[days[0], days[-1]], y=[initial_capital]*2, z=[0,0],
+            mode="lines", line=dict(color="white", width=1, dash="dash"),
+            name="Initial Capital", visible=vis, opacity=0.4,
+            showlegend=(idx == 0),
+        ))
+        mc = "#00e676" if ret_pct >= 0 else "#ff1744"
+        fig.add_trace(go.Scatter3d(
+            x=[days[-1]], y=[final], z=[0],
+            mode="markers+text",
+            marker=dict(size=8, color=mc, line=dict(width=2, color="white")),
+            text=[f"${final:,.0f} ({ret_pct:+.1f}%)"],
+            textposition="top center",
+            textfont=dict(size=12, color=color),
+            visible=vis, showlegend=False,
+        ))
+
+    # Build slider
+    steps = []
+    for idx, mult in enumerate(sorted_levels):
+        vis_arr = [False] * (len(sorted_levels) * traces_per)
+        base = idx * traces_per
+        vis_arr[base] = vis_arr[base+1] = vis_arr[base+2] = True
+        res = risk_results[mult]
+        final = res.get("final_value", 0)
+        ret_pct = res.get("total_return", 0) * 100
+        pos_pct = res.get("position_size_pct", 0)
+        steps.append(dict(
+            args=[{"visible": vis_arr},
+                  {"title.text": f"📊 {symbol} | {strategy} | Risk {mult:.2f}× | Pos {pos_pct:.0f}% | ${final:,.0f} ({ret_pct:+.1f}%)"}],
+            label=f"{mult:.2f}×",
+            method="update",
+        ))
+
+    res0 = risk_results[sorted_levels[default_idx]]
+    final0 = res0.get("final_value", 0)
+    ret0 = res0.get("total_return", 0) * 100
+    pos0 = res0.get("position_size_pct", 0)
+
+    fig.update_layout(
+        **DARK,
+        title=dict(
+            text=f"📊 {symbol} | {strategy} | Risk {sorted_levels[default_idx]:.2f}× | Pos {pos0:.0f}% | ${final0:,.0f} ({ret0:+.1f}%)",
+            font=dict(size=15, color="#e6edf3", family="Rajdhani, sans-serif"),
+            x=0.5, xanchor="center",
+        ),
+        height=700,
+        scene=dict(
+            xaxis=dict(title="Trading Days", gridcolor="#21262d", backgroundcolor="#0d1117", color="#8b949e"),
+            yaxis=dict(title="Portfolio Value ($)", gridcolor="#21262d", backgroundcolor="#0d1117", color="#8b949e"),
+            zaxis=dict(title="Daily Return (%)", gridcolor="#21262d", backgroundcolor="#0d1117", color="#8b949e"),
+            bgcolor="#0d1117",
+            camera=dict(eye=dict(x=1.6, y=-1.6, z=0.9)),
+        ),
+        legend=dict(bgcolor="rgba(13,17,23,0.8)", bordercolor="#21262d", borderwidth=1),
+        margin=dict(l=0, r=0, t=60, b=80),
+        sliders=[dict(
+            active=default_idx,
+            currentvalue=dict(prefix="⚡ Risk Level: ", visible=True,
+                              xanchor="center",
+                              font=dict(size=14, color="#e0e0e0")),
+            pad=dict(b=10, t=40),
+            len=0.9, x=0.05,
+            steps=steps,
+            bgcolor="#21262d",
+            activebgcolor="#58a6ff",
+            bordercolor="#30363d",
+            font=dict(size=10, color="#c9d1d9"),
+        )],
+    )
+    return fig
+
+
+def chart_macd(df: pd.DataFrame, symbol: str) -> go.Figure:
+    """2-panel MACD chart with price and MACD histogram."""
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        row_heights=[0.6, 0.4],
+        vertical_spacing=0.04,
     )
 
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ===== KEY INSIGHT BOX =====
-    st.markdown("""
-    <div style="
-        background: linear-gradient(135deg, #0d1a2e 0%, #1a1a2e 100%);
-        border: 1px solid #1f4068;
-        border-radius: 12px;
-        padding: 24px;
-        margin-top: 12px;
-    ">
-        <div style="font-size: 18px; font-weight: 700; color: #2196f3; margin-bottom: 12px;">
-            💡 The Lesson
-        </div>
-        <div style="color: #c0c0c0; font-size: 15px; line-height: 1.8;">
-            The problem was never the indicators — <b style="color: #2196f3;">RSI, MACD, and Bollinger Bands all work correctly.</b> 
-            The problem was using them without context. An RSI oversold signal means something completely different 
-            in a bull market vs a bear market. The fix wasn't more complexity — it was 
-            <b style="color: #2196f3;">adding awareness</b>.<br><br>
-            This mirrors a principle from physics: <i>a measurement only has meaning within its reference frame.</i>
-            A trading signal only has meaning within its market regime.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # After metrics row
-    st.markdown("<br>", unsafe_allow_html=True)
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.markdown("""
-        <div class="stat-card">
-            <div class="stat-number">100%</div>
-            <div class="stat-label">Trend Alignment</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col2:
-        st.markdown("""
-        <div class="stat-card">
-            <div class="stat-number">0%</div>
-            <div class="stat-label">Whipsaw Rate</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col3:
-        st.markdown("""
-        <div class="stat-card">
-            <div class="stat-number blue">3-5%</div>
-            <div class="stat-label">Commission Drag</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col4:
-        st.markdown("""
-        <div class="stat-card">
-            <div class="stat-number cyan">+3.36%</div>
-            <div class="stat-label">Combined Return</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-
-def render_risk_slider(data):
-    st.markdown('<div class="section-header">🎚️ Risk Simulator</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-subtext">Drag the slider to see how position sizing impacts returns, risk, and drawdowns — live.</div>', unsafe_allow_html=True)
-    st.info("🚧 Coming in Step 3 — Interactive risk slider with live equity curve.")
-
-
-def render_3d_surface(data):
-    st.markdown('<div class="section-header">🏔️ Risk Landscape (3D)</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-subtext">Portfolio value across time × risk level — a 3D mountain you can rotate and explore.</div>', unsafe_allow_html=True)
-    st.info("🚧 Coming in Step 4 — Rotatable 3D surface chart.")
-
-
-def render_price_charts(data):
-    st.markdown('<div class="section-header">📈 Price Action & Signals</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-subtext">Interactive candlestick charts with indicators and buy/sell signals.</div>', unsafe_allow_html=True)
-    st.info("🚧 Coming in Step 5 — Candlestick + RSI + MACD + signal markers.")
-
-
-def render_strategy_comparison(data):
-    st.markdown('<div class="section-header">⚔️ Strategy Comparison</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-subtext">How each strategy performed — trades, returns, signal counts.</div>', unsafe_allow_html=True)
-    st.info("🚧 Coming in Step 6.")
-
-
-def render_backtest_results(data):
-    st.markdown('<div class="section-header">📊 Backtest Results</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-subtext">Full performance metrics for all strategies.</div>', unsafe_allow_html=True)
-    st.info("🚧 Coming in Step 6.")
-
-
-def render_ml_results():
-    st.markdown('<div class="section-header">🧠 Machine Learning</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-subtext">ML model performance — and why markets are hard to predict.</div>', unsafe_allow_html=True)
-    st.info("🚧 Coming in Step 6.")
-
-
-def render_risk_analysis(data):
-    st.markdown('<div class="section-header">🛡️ Risk Analysis</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-subtext">Correlation matrix, risk scores, and diversification analysis.</div>', unsafe_allow_html=True)
-    st.info("🚧 Coming in Step 6.")
-
-
-def render_architecture():
-    st.markdown('<div class="section-header">🏗️ System Architecture</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-subtext">How the entire engine is built — 6 phases, end to end.</div>', unsafe_allow_html=True)
-    st.info("🚧 Coming in Step 6.")
-
-
-# ==========================================
-# FOOTER
-# ==========================================
-def render_footer():
-    st.markdown("""
-    <div class="footer">
-        🤖 Algorithmic Trading Engine — Built with Python, Streamlit & Plotly<br>
-        <span style="font-size: 12px; color: #3a4556;">
-            Data: Yahoo Finance | ML: XGBoost, Random Forest, Logistic Regression | 
-            Risk: Correlation Analysis, VaR, Drawdown Metrics
-        </span>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-# ==========================================
-# MAIN
-# ==========================================
-def main():
-    # Inject custom CSS
-    def inject_css()
-    st.markdown("""
-    <style>
-        /* ============================================
-           ANIMATED TRADING TERMINAL THEME
-           ============================================ */
-
-        /* ===== KEYFRAME ANIMATIONS ===== */
-
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes fadeInLeft {
-            from {
-                opacity: 0;
-                transform: translateX(-30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-
-        @keyframes fadeInRight {
-            from {
-                opacity: 0;
-                transform: translateX(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-
-        @keyframes fadeInScale {
-            from {
-                opacity: 0;
-                transform: scale(0.9);
-            }
-            to {
-                opacity: 1;
-                transform: scale(1);
-            }
-        }
-
-        @keyframes gradientShift {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-
-        @keyframes pulseGlow {
-            0%, 100% { opacity: 0.4; }
-            50% { opacity: 1; }
-        }
-
-        @keyframes borderGlow {
-            0%, 100% { border-color: #1e2d3d; }
-            50% { border-color: #00e676; }
-        }
-
-        @keyframes textGradient {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-
-        @keyframes floatUp {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-6px); }
-        }
-
-        @keyframes scanline {
-            0% { top: -10%; }
-            100% { top: 110%; }
-        }
-
-        @keyframes particleFloat {
-            0%, 100% {
-                transform: translateY(0) translateX(0);
-                opacity: 0;
-            }
-            10% { opacity: 0.4; }
-            90% { opacity: 0.4; }
-            50% {
-                transform: translateY(-120px) translateX(30px);
-            }
-        }
-
-        @keyframes tickerScroll {
-            0% { transform: translateX(100%); }
-            100% { transform: translateX(-100%); }
-        }
-
-        @keyframes countUp {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* ===== GLOBAL ===== */
-        .stApp {
-            background-color: #0a0e17;
-            overflow-x: hidden;
-        }
-
-        /* Animated background grid */
-        .stApp::before {
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-image:
-                linear-gradient(rgba(0, 230, 118, 0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0, 230, 118, 0.03) 1px, transparent 1px);
-            background-size: 60px 60px;
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        /* Scanning line effect */
-        .stApp::after {
-            content: '';
-            position: fixed;
-            top: -10%;
-            left: 0;
-            width: 100%;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, rgba(0, 230, 118, 0.15), transparent);
-            animation: scanline 8s linear infinite;
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        /* Sidebar */
-        section[data-testid="stSidebar"] {
-            background-color: #0d1117;
-            border-right: 1px solid #1a2332;
-        }
-
-        /* ===== HERO SECTION ===== */
-        .hero-container {
-            text-align: center;
-            padding: 40px 20px 20px 20px;
-            animation: fadeInUp 0.8s ease-out;
-        }
-
-        .hero-title {
-            font-size: 52px;
-            font-weight: 800;
-            background: linear-gradient(135deg, #00e676 0%, #00bcd4 25%, #2196f3 50%, #00e676 75%, #00bcd4 100%);
-            background-size: 300% 300%;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: textGradient 6s ease infinite;
-            margin-bottom: 8px;
-            letter-spacing: -1px;
-        }
-
-        .hero-subtitle {
-            font-size: 18px;
-            color: #6c7a89;
-            margin-bottom: 30px;
-            font-weight: 300;
-            animation: fadeInUp 0.8s ease-out 0.2s both;
-        }
-
-        .hero-subtitle span {
-            color: #00e676;
-            font-weight: 600;
-        }
-
-        /* ===== STAT CARDS ===== */
-        .stat-row {
-            display: flex;
-            justify-content: center;
-            gap: 16px;
-            flex-wrap: wrap;
-            margin: 20px 0 30px 0;
-            animation: fadeInUp 0.8s ease-out 0.4s both;
-        }
-
-        .stat-card {
-            background: linear-gradient(135deg, #111827 0%, #1a2332 100%);
-            border: 1px solid #1e2d3d;
-            border-radius: 12px;
-            padding: 20px 28px;
-            text-align: center;
-            min-width: 160px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
-        }
-
-        /* Card shimmer effect on hover */
-        .stat-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(
-                90deg,
-                transparent,
-                rgba(0, 230, 118, 0.05),
-                transparent
-            );
-            transition: left 0.5s ease;
-        }
-
-        .stat-card:hover::before {
-            left: 100%;
-        }
-
-        .stat-card:hover {
-            transform: translateY(-4px);
-            border-color: #00e676;
-            box-shadow: 0 8px 30px rgba(0, 230, 118, 0.15);
-        }
-
-        .stat-number {
-            font-size: 32px;
-            font-weight: 800;
-            color: #00e676;
-            line-height: 1.2;
-            animation: countUp 0.6s ease-out;
-        }
-
-        .stat-number.blue { color: #2196f3; }
-        .stat-number.cyan { color: #00bcd4; }
-        .stat-number.orange { color: #ff9800; }
-        .stat-number.purple { color: #9c27b0; }
-
-        .stat-label {
-            font-size: 13px;
-            color: #6c7a89;
-            margin-top: 4px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        /* ===== SECTION HEADERS ===== */
-        .section-header {
-            font-size: 28px;
-            font-weight: 700;
-            color: #e2e8f0;
-            margin: 40px 0 8px 0;
-            padding-bottom: 8px;
-            border-bottom: 2px solid #1a2332;
-            animation: fadeInLeft 0.6s ease-out;
-        }
-
-        .section-subtext {
-            color: #6c7a89;
-            font-size: 15px;
-            margin-bottom: 24px;
-            animation: fadeInLeft 0.6s ease-out 0.1s both;
-        }
-
-        /* ===== NAVIGATION ===== */
-        .nav-header {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            color: #4a5568;
-            margin-bottom: 8px;
-            font-weight: 600;
-        }
-
-        /* ===== GLOWING DIVIDER ===== */
-        .glow-divider {
-            height: 1px;
-            background: linear-gradient(90deg, transparent, #00e676, transparent);
-            background-size: 200% 100%;
-            border: none;
-            margin: 30px 0;
-            animation: gradientShift 3s ease infinite;
-        }
-
-        /* ===== FOOTER ===== */
-        .footer {
-            text-align: center;
-            color: #4a5568;
-            font-size: 13px;
-            padding: 40px 0 20px 0;
-            border-top: 1px solid #1a2332;
-            margin-top: 60px;
-            animation: fadeInUp 0.6s ease-out;
-        }
-
-        .footer a {
-            color: #00e676;
-            text-decoration: none;
-        }
-
-        /* ===== HIDE STREAMLIT DEFAULTS ===== */
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
-        header {visibility: hidden;}
-
-        /* ===== SIDEBAR RADIO STYLING ===== */
-        div[data-testid="stSidebar"] .stRadio > label {
-            display: none;
-        }
-
-        div[data-testid="stSidebar"] .stRadio > div {
-            gap: 2px;
-        }
-
-        div[data-testid="stSidebar"] .stRadio > div > label {
-            background: transparent;
-            border: 1px solid transparent;
-            border-radius: 8px;
-            padding: 8px 16px;
-            color: #8892b0;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            font-size: 14px;
-        }
-
-        div[data-testid="stSidebar"] .stRadio > div > label:hover {
-            background: #111827;
-            border-color: #1e2d3d;
-            color: #e2e8f0;
-            transform: translateX(4px);
-        }
-
-        div[data-testid="stSidebar"] .stRadio > div > label[data-checked="true"] {
-            background: linear-gradient(135deg, #0d2818 0%, #0a1628 100%);
-            border-color: #00e676;
-            color: #00e676;
-            font-weight: 600;
-        }
-
-        /* ===== STREAMLIT ELEMENTS STYLING ===== */
-
-        /* Expanders */
-        .streamlit-expanderHeader {
-            background: #111827 !important;
-            border: 1px solid #1e2d3d !important;
-            border-radius: 8px !important;
-            color: #e2e8f0 !important;
-            transition: all 0.3s ease !important;
-        }
-
-        .streamlit-expanderHeader:hover {
-            border-color: #00e676 !important;
-            background: #0d1a2e !important;
-        }
-
-        /* DataFrames */
-        .stDataFrame {
-            animation: fadeInUp 0.5s ease-out;
-        }
-
-        /* Metrics */
-        [data-testid="stMetric"] {
-            background: linear-gradient(135deg, #111827 0%, #1a2332 100%);
-            border: 1px solid #1e2d3d;
-            border-radius: 10px;
-            padding: 12px 16px;
-            transition: all 0.3s ease;
-        }
-
-        [data-testid="stMetric"]:hover {
-            border-color: #00e676;
-            box-shadow: 0 4px 20px rgba(0, 230, 118, 0.1);
-        }
-
-        /* Plotly charts */
-        .stPlotlyChart {
-            animation: fadeInScale 0.6s ease-out;
-            border-radius: 12px;
-            overflow: hidden;
-        }
-
-        /* Info/Warning/Error boxes */
-        .stAlert {
-            animation: fadeInUp 0.5s ease-out;
-        }
-
-        /* ===== OVERVIEW CARDS STAGGER ===== */
-        [data-testid="stVerticalBlock"] > div {
-            animation: fadeInUp 0.5s ease-out both;
-        }
-
-        [data-testid="stHorizontalBlock"] > div:nth-child(1) > div {
-            animation-delay: 0s;
-        }
-
-        [data-testid="stHorizontalBlock"] > div:nth-child(2) > div {
-            animation-delay: 0.1s;
-        }
-
-        [data-testid="stHorizontalBlock"] > div:nth-child(3) > div {
-            animation-delay: 0.2s;
-        }
-
-        /* ===== RESPONSIVE ===== */
-        @media (max-width: 768px) {
-            .hero-title {
-                font-size: 32px;
-            }
-
-            .stat-row {
-                gap: 8px;
-            }
-
-            .stat-card {
-                min-width: 120px;
-                padding: 14px 18px;
-            }
-
-            .stat-number {
-                font-size: 24px;
-            }
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # Data status
-    st.markdown("### 📡 Data Status")
-    data = load_all_stocks()
-    if data:
-        st.success(f"✅ {len(data)} stocks loaded")
-        for sym in data:
-            rows = len(data[sym])
-            price = data[sym]["close"].iloc[-1]
-            st.markdown(
-                f"**{sym}** — ${price:.2f} "
-                f"<span style='color:#4a5568;font-size:12px;'>({rows} days)</span>",
-                unsafe_allow_html=True
-            )
-    else:
-        st.error("❌ No data found. Run generate_data.py first.")
-        return
+    # Price + SMAs
+    fig.add_trace(go.Scatter(
+        x=df.index, y=df["close"], mode="lines",
+        line=dict(color="#00e676", width=2), name="Price",
+    ), row=1, col=1)
+    for col, color, label in [("sma_20","#ff9800","SMA 20"),("sma_50","#2196f3","SMA 50")]:
+        if col in df.columns:
+            fig.add_trace(go.Scatter(
+                x=df.index, y=df[col], mode="lines",
+                line=dict(color=color, width=1.5, dash="dot"), name=label,
+            ), row=1, col=1)
+
+    # MACD line + signal
+    fig.add_trace(go.Scatter(
+        x=df.index, y=df["macd_line"], mode="lines",
+        line=dict(color="#2196f3", width=1.5), name="MACD",
+    ), row=2, col=1)
+    fig.add_trace(go.Scatter(
+        x=df.index, y=df["macd_signal"], mode="lines",
+        line=dict(color="#ff9800", width=1.5), name="Signal",
+    ), row=2, col=1)
+
+    # Histogram
+    hist = df["macd_histogram"].values
+    colors = ["#26a69a" if v >= 0 else "#ef5350" for v in hist]
+    fig.add_trace(go.Bar(
+        x=df.index, y=hist, marker_color=colors,
+        name="Histogram", opacity=0.7,
+    ), row=2, col=1)
+
+    fig.update_layout(
+        **DARK,
+        title=dict(text=f"📉 {symbol} — MACD Analysis",
+                   font=dict(size=16, color="#e6edf3", family="Rajdhani, sans-serif"),
+                   x=0.5, xanchor="center"),
+        height=520,
+        hovermode="x unified",
+        xaxis2=dict(gridcolor="#21262d", color="#8b949e"),
+        yaxis=dict(gridcolor="#21262d", color="#8b949e", title="Price ($)"),
+        yaxis2=dict(gridcolor="#21262d", color="#8b949e", title="MACD"),
+        legend=dict(bgcolor="rgba(13,17,23,0.8)", bordercolor="#21262d", borderwidth=1),
+        margin=dict(l=0, r=0, t=50, b=0),
+    )
+    return fig
+
+
+def chart_drawdown(portfolio_df: pd.DataFrame, symbol: str) -> go.Figure:
+    """Drawdown chart."""
+    daily = portfolio_df["daily_return"].fillna(0)
+    cum = (1 + daily).cumprod()
+    running_max = cum.cummax()
+    dd = (cum - running_max) / running_max * 100
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=portfolio_df.index, y=dd,
+        mode="lines", fill="tozeroy",
+        line=dict(color="#ff1744", width=1.5),
+        fillcolor="rgba(255,23,68,0.15)",
+        name="Drawdown",
+        hovertemplate="Date: %{x|%Y-%m-%d}<br>Drawdown: %{y:.2f}%<extra></extra>",
+    ))
+    fig.update_layout(
+        **DARK,
+        title=dict(text=f"📉 {symbol} — Portfolio Drawdown",
+                   font=dict(size=16, color="#e6edf3", family="Rajdhani, sans-serif"),
+                   x=0.5, xanchor="center"),
+        height=300,
+        xaxis=dict(gridcolor="#21262d", color="#8b949e"),
+        yaxis=dict(gridcolor="#21262d", color="#8b949e", title="Drawdown (%)"),
+        margin=dict(l=0, r=0, t=50, b=0),
+        hovermode="x unified",
+    )
+    return fig
+
+
+def chart_equity_2d(portfolio_df: pd.DataFrame, symbol: str,
+                    initial_capital: float, strategy: str) -> go.Figure:
+    """Clean 2D equity curve."""
+    vals = portfolio_df["total_value"].values
+    fig = go.Figure()
+    fig.add_hline(y=initial_capital, line=dict(color="white", width=1, dash="dash"), opacity=0.4)
+    colors_fill = ["rgba(0,230,118,0.12)" if vals[-1] >= initial_capital
+                   else "rgba(255,23,68,0.12)"]
+    line_color  = "#00e676" if vals[-1] >= initial_capital else "#ff1744"
+    fig.add_trace(go.Scatter(
+        x=portfolio_df.index, y=vals,
+        mode="lines", line=dict(color=line_color, width=2),
+        fill="tozeroy", fillcolor=colors_fill[0],
+        name="Portfolio Value",
+        hovertemplate="Date: %{x|%Y-%m-%d}<br>Value: $%{y:,.0f}<extra></extra>",
+    ))
+    fig.update_layout(
+        **DARK,
+        title=dict(text=f"📈 {symbol} — Equity Curve ({strategy})",
+                   font=dict(size=16, color="#e6edf3", family="Rajdhani, sans-serif"),
+                   x=0.5, xanchor="center"),
+        height=340,
+        xaxis=dict(gridcolor="#21262d", color="#8b949e"),
+        yaxis=dict(gridcolor="#21262d", color="#8b949e", title="Portfolio Value ($)"),
+        margin=dict(l=0, r=0, t=50, b=0),
+        hovermode="x unified",
+        legend=dict(bgcolor="rgba(0,0,0,0)"),
+    )
+    return fig
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SIDEBAR
+# ══════════════════════════════════════════════════════════════════════════════
+
+with st.sidebar:
+    st.markdown("## ⚙️ Engine Config")
+
+    symbol = st.selectbox("Stock Symbol", SYMBOLS, index=0)
+    strategy_name = st.selectbox("Trading Strategy", list(STRATEGIES.keys()), index=0)
+    signal_col = STRATEGIES[strategy_name]
 
     st.markdown("---")
-    st.markdown(
-        "<div style='color:#4a5568; font-size:12px; text-align:center;'>"
-        "Built by Falgun Gadhiya<br>"
-        "Phase 6 of 6"
-        "</div>",
-        unsafe_allow_html=True
+    st.markdown("## 📅 Date Range")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        start_date = st.date_input("Start", value=date(2020, 1, 1),
+                                   min_value=date(2015, 1, 1), max_value=date(2024, 1, 1))
+    with col_b:
+        end_date = st.date_input("End", value=date(2024, 12, 31),
+                                 min_value=date(2016, 1, 1), max_value=date(2025, 12, 31))
+
+    st.markdown("---")
+    st.markdown("## 💰 Capital & Costs")
+    initial_capital = st.number_input("Initial Capital ($)", min_value=1000,
+                                       max_value=10_000_000, value=100_000, step=5000)
+    commission = st.slider("Commission (%)", 0.0, 1.0, 0.1, 0.01,
+                           help="% charged per trade (buy + sell)")
+    slippage   = st.slider("Slippage (%)", 0.0, 0.5, 0.05, 0.01,
+                           help="Price impact of executing trades")
+
+    st.markdown("---")
+    st.markdown("## 🎚️ Risk Parameters")
+    max_position = st.slider("Max Position Size (%)", 5, 95, 20, 5,
+                             help="Max % of capital in one trade")
+    risk_per_trade = st.slider("Risk Per Trade (%)", 0.5, 20.0, 2.0, 0.5)
+    stop_loss   = st.slider("Stop Loss (%)", 1, 20, 5, 1)
+    take_profit = st.slider("Take Profit (%)", 1, 50, 10, 1)
+
+    st.markdown("---")
+    run_btn = st.button("▶  RUN ENGINE", use_container_width=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# HERO BANNER
+# ══════════════════════════════════════════════════════════════════════════════
+
+st.markdown("""
+<div class="hero-banner">
+    <div class="hero-title">⚡ ALGORITHMIC TRADING ENGINE</div>
+    <div class="hero-subtitle">Quantitative Strategy Backtester · 3D Interactive Analytics · ML-Ready</div>
+    <span class="stat-pill">5 Strategies</span>
+    <span class="stat-pill">8 Stocks</span>
+    <span class="stat-pill">3D Charts</span>
+    <span class="stat-pill">Live Risk Slider</span>
+    <span class="stat-pill">Real Market Data</span>
+</div>
+""", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# MAIN LOGIC
+# ══════════════════════════════════════════════════════════════════════════════
+
+if not run_btn and "results" not in st.session_state:
+    st.info("👈  Configure your parameters in the sidebar, then hit **RUN ENGINE** to start.")
+    st.markdown("""
+    <div style='padding:24px; background:#0d1117; border:1px solid #1a2332; border-radius:10px; margin-top:20px;'>
+    <h4 style='font-family:Rajdhani,sans-serif;color:#58a6ff;margin:0 0 12px 0;'>What this engine does</h4>
+    <p style='color:#8b949e;font-size:0.9rem;line-height:1.7;'>
+    Fetches real historical market data from Yahoo Finance, computes 8 technical indicators
+    (SMA, EMA, RSI, MACD, Bollinger Bands, ATR, Stochastic, VWAP), applies your chosen trading
+    strategy, and runs a full day-by-day backtest with realistic commission &amp; slippage simulation.<br><br>
+    The <strong style='color:#e6edf3;'>risk slider</strong> re-runs the backtest at 10 different capital
+    allocation levels so you can instantly see how more or less aggressive position sizing changes
+    your returns, drawdown, and Sharpe ratio.
+    </p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()
+
+# ── Run / cache results ────────────────────────────────────────────────────────
+if run_btn:
+    st.session_state.pop("results", None)  # Force fresh run
+
+if "results" not in st.session_state or run_btn:
+    config = build_mock_config(
+        initial_capital, commission, slippage,
+        max_position, risk_per_trade, stop_loss, take_profit,
     )
 
-    # ===== ROUTE TO PAGE =====
-    if page == "🏠 Overview":
-        render_hero()
-        # Show mini previews of each section
-        st.markdown('<div class="section-header">🗺️ What\'s Inside</div>', unsafe_allow_html=True)
+    with st.spinner(f"Fetching {symbol} data and running engine…"):
+        df = fetch_and_process(symbol, str(start_date), str(end_date))
 
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown("""
-            <div class="stat-card" style="text-align:left; min-width:auto;">
-                <div style="font-size:24px; margin-bottom:8px;">📖</div>
-                <div style="color:#e2e8f0; font-weight:600; margin-bottom:4px;">The Story</div>
-                <div style="color:#6c7a89; font-size:13px;">Every strategy got an F. Here's how I diagnosed 5 critical bugs and fixed them all.</div>
-            </div>
-            """, unsafe_allow_html=True)
+    if df.empty:
+        st.error(f"Could not fetch data for {symbol}. Try a different symbol or date range.")
+        st.stop()
 
-            st.markdown("""
-            <div class="stat-card" style="text-align:left; min-width:auto; margin-top:12px;">
-                <div style="font-size:24px; margin-bottom:8px;">📈</div>
-                <div style="color:#e2e8f0; font-weight:600; margin-bottom:4px;">Price Charts</div>
-                <div style="color:#6c7a89; font-size:13px;">Candlestick charts with buy/sell signals, RSI, MACD, and Bollinger Bands.</div>
-            </div>
-            """, unsafe_allow_html=True)
+    if signal_col not in df.columns or df[signal_col].abs().sum() == 0:
+        st.warning(f"Strategy **{strategy_name}** generated no signals for {symbol} in this date range. Try a different combination.")
+        st.stop()
 
-            st.markdown("""
-            <div class="stat-card" style="text-align:left; min-width:auto; margin-top:12px;">
-                <div style="font-size:24px; margin-bottom:8px;">🧠</div>
-                <div style="color:#e2e8f0; font-weight:600; margin-bottom:4px;">Machine Learning</div>
-                <div style="color:#6c7a89; font-size:13px;">3 ML models, 118 features, walk-forward validation. Markets are hard.</div>
-            </div>
-            """, unsafe_allow_html=True)
+    with st.spinner("Running backtests across all risk levels…"):
+        risk_results = {}
+        for mult in RISK_MULTIPLIERS:
+            res = run_backtest_at_risk(df, signal_col, config, mult)
+            if res:
+                risk_results[mult] = res
 
-        with col2:
-            st.markdown("""
-            <div class="stat-card" style="text-align:left; min-width:auto;">
-                <div style="font-size:24px; margin-bottom:8px;">🎚️</div>
-                <div style="color:#e2e8f0; font-weight:600; margin-bottom:4px;">Risk Simulator</div>
-                <div style="color:#6c7a89; font-size:13px;">Drag a slider from 10% to 100% position size and watch the equity curve update live.</div>
-            </div>
-            """, unsafe_allow_html=True)
+    if not risk_results:
+        st.error("Backtest produced no results. Try adjusting your parameters.")
+        st.stop()
 
-            st.markdown("""
-            <div class="stat-card" style="text-align:left; min-width:auto; margin-top:12px;">
-                <div style="font-size:24px; margin-bottom:8px;">⚔️</div>
-                <div style="color:#e2e8f0; font-weight:600; margin-bottom:4px;">Strategy Battle</div>
-                <div style="color:#6c7a89; font-size:13px;">5 strategies head-to-head: SMA, RSI, MACD, Bollinger, Combined.</div>
-            </div>
-            """, unsafe_allow_html=True)
+    # Baseline = 1.0× (or closest)
+    base_mult = 1.0 if 1.0 in risk_results else min(risk_results, key=lambda x: abs(x-1.0))
+    base_res = risk_results[base_mult]
 
-            st.markdown("""
-            <div class="stat-card" style="text-align:left; min-width:auto; margin-top:12px;">
-                <div style="font-size:24px; margin-bottom:8px;">🛡️</div>
-                <div style="color:#e2e8f0; font-weight:600; margin-bottom:4px;">Risk Analysis</div>
-                <div style="color:#6c7a89; font-size:13px;">Correlation heatmap, risk scores, TSLA flagged HIGH risk at 6.6/10.</div>
-            </div>
-            """, unsafe_allow_html=True)
+    perf = PerformanceAnalyzer()
+    metrics = perf.calculate_all_metrics(
+        base_res["portfolio_history"],
+        base_res["trades"],
+        initial_capital,
+    )
+    grade_str = perf._grade_strategy(metrics)
 
-        with col3:
-            st.markdown("""
-            <div class="stat-card" style="text-align:left; min-width:auto;">
-                <div style="font-size:24px; margin-bottom:8px;">🏔️</div>
-                <div style="color:#e2e8f0; font-weight:600; margin-bottom:4px;">3D Risk Landscape</div>
-                <div style="color:#6c7a89; font-size:13px;">A 3D surface showing portfolio value across time × risk level. Rotate and explore.</div>
-            </div>
-            """, unsafe_allow_html=True)
+    st.session_state["results"] = dict(
+        df=df, risk_results=risk_results, base_res=base_res,
+        metrics=metrics, grade_str=grade_str,
+        symbol=symbol, strategy_name=strategy_name,
+        signal_col=signal_col, initial_capital=initial_capital,
+        config=config,
+    )
 
-            st.markdown("""
-            <div class="stat-card" style="text-align:left; min-width:auto; margin-top:12px;">
-                <div style="font-size:24px; margin-bottom:8px;">📊</div>
-                <div style="color:#e2e8f0; font-weight:600; margin-bottom:4px;">Backtest Results</div>
-                <div style="color:#6c7a89; font-size:13px;">Return, Sharpe, Win Rate, Max Drawdown — every metric for every strategy.</div>
-            </div>
-            """, unsafe_allow_html=True)
+R = st.session_state["results"]
+df          = R["df"]
+risk_results = R["risk_results"]
+base_res    = R["base_res"]
+metrics     = R["metrics"]
+grade_str   = R["grade_str"]
+sym         = R["symbol"]
+strat_name  = R["strategy_name"]
+sig_col     = R["signal_col"]
+init_cap    = R["initial_capital"]
 
-            st.markdown("""
-            <div class="stat-card" style="text-align:left; min-width:auto; margin-top:12px;">
-                <div style="font-size:24px; margin-bottom:8px;">🏗️</div>
-                <div style="color:#e2e8f0; font-weight:600; margin-bottom:4px;">Architecture</div>
-                <div style="color:#6c7a89; font-size:13px;">6-phase system design: Pipeline → Indicators → Strategy → Backtest → ML → Dashboard.</div>
-            </div>
-            """, unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════════════
+# KEY METRICS ROW
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown('<div class="section-header">📊 Performance Summary</div>', unsafe_allow_html=True)
 
-    elif page == "📖 The Story":
-        render_hero()
-        render_story()
+c1, c2, c3, c4, c5, c6 = st.columns(6)
+ret_pct = metrics["total_return_pct"]
+c1.metric("Total Return",    fmt_pct(ret_pct),
+          delta=fmt_pct(metrics["annualized_return"]*100) + " ann.")
+c2.metric("Final Value",     f"${metrics['final_value']:,.0f}",
+          delta=f"${metrics['final_value']-init_cap:+,.0f}")
+c3.metric("Sharpe Ratio",    f"{metrics['sharpe_ratio']:.3f}",
+          delta="Sortino: " + f"{metrics['sortino_ratio']:.2f}")
+c4.metric("Max Drawdown",    fmt_pct(metrics['max_drawdown_pct']),
+          delta=f"Calmar: {metrics['calmar_ratio']:.2f}")
+c5.metric("Win Rate",        f"{metrics['win_rate']*100:.1f}%",
+          delta=f"{metrics['total_trades']} trades")
+c6.metric("Profit Factor",   f"{metrics['profit_factor']:.2f}",
+          delta=f"VaR 95%: {metrics['var_95']*100:.2f}%")
 
-    elif page == "🎚️ Risk Simulator":
-        render_hero()
-        render_risk_slider(data)
+# Grade
+st.markdown("---")
+gcls = grade_color(grade_str)
+letter = grade_str.split()[0]
+desc   = " ".join(grade_str.split()[1:])
+st.markdown(
+    f'<span class="grade-badge {gcls}">{letter}</span>'
+    f'<span style="margin-left:14px;font-family:Exo 2,sans-serif;font-size:1rem;color:#8b949e;">{desc}</span>',
+    unsafe_allow_html=True,
+)
 
-    elif page == "🏔️ 3D Risk Landscape":
-        render_hero()
-        render_3d_surface(data)
+# ══════════════════════════════════════════════════════════════════════════════
+# RISK SLIDER + EQUITY CHART (3D)
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown('<div class="section-header">🎚️ Interactive Risk Bar — 3D Equity Curve</div>', unsafe_allow_html=True)
+st.markdown(
+    '<p class="risk-label">drag the slider inside the chart ↓ to change risk level · '
+    'green→yellow→red = low→medium→high risk · chart updates live</p>',
+    unsafe_allow_html=True,
+)
 
-    elif page == "📈 Price Charts":
-        render_hero()
-        render_price_charts(data)
+sorted_lvls = sorted(risk_results.keys())
+active_mult = 1.0 if 1.0 in risk_results else sorted_lvls[len(sorted_lvls)//2]
+fig_risk = chart_equity_risk(risk_results, init_cap, sym, strat_name, active_mult)
+st.plotly_chart(fig_risk, use_container_width=True)
 
-    elif page == "⚔️ Strategy Comparison":
-        render_hero()
-        render_strategy_comparison(data)
+# ══════════════════════════════════════════════════════════════════════════════
+# PRICE + SIGNALS (3D) + EQUITY 2D + DRAWDOWN
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown('<div class="section-header">📈 Price, Signals & Equity</div>', unsafe_allow_html=True)
 
-    elif page == "📊 Backtest Results":
-        render_hero()
-        render_backtest_results(data)
+col_left, col_right = st.columns([3, 2])
+with col_left:
+    st.plotly_chart(chart_price_signals(df, sym, sig_col), use_container_width=True)
+with col_right:
+    st.plotly_chart(chart_equity_2d(base_res["portfolio_history"], sym,
+                                    init_cap, strat_name), use_container_width=True)
+    st.plotly_chart(chart_drawdown(base_res["portfolio_history"], sym),
+                    use_container_width=True)
 
-    elif page == "🧠 Machine Learning":
-        render_hero()
-        render_ml_results()
+# ══════════════════════════════════════════════════════════════════════════════
+# MACD
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown('<div class="section-header">📉 MACD Analysis</div>', unsafe_allow_html=True)
+st.plotly_chart(chart_macd(df, sym), use_container_width=True)
 
-    elif page == "🛡️ Risk Analysis":
-        render_hero()
-        render_risk_analysis(data)
+# ══════════════════════════════════════════════════════════════════════════════
+# TRADE LOG
+# ══════════════════════════════════════════════════════════════════════════════
+trades_df = base_res["trades"]
+if not trades_df.empty:
+    st.markdown('<div class="section-header">📋 Trade Log</div>', unsafe_allow_html=True)
 
-    elif page == "🏗️ Architecture":
-        render_hero()
-        render_architecture()
+    display = trades_df.copy()
+    display["pnl"] = display["pnl"].map(lambda x: f"${x:+,.2f}")
+    display["pnl_percent"] = display["pnl_percent"].map(lambda x: f"{x*100:+.2f}%")
+    display["entry_price"] = display["entry_price"].map(lambda x: f"${x:.2f}")
+    display["exit_price"]  = display["exit_price"].map(lambda x: f"${x:.2f}" if pd.notna(x) else "—")
 
-    # Footer on every page
-    render_footer()
+    show_cols = ["symbol","entry_date","entry_price","exit_date",
+                 "exit_price","shares","pnl","pnl_percent","status"]
+    show_cols = [c for c in show_cols if c in display.columns]
 
+    st.dataframe(
+        display[show_cols].tail(50),
+        use_container_width=True,
+        height=320,
+    )
 
-if __name__ == "__main__":
-    main()
+# ══════════════════════════════════════════════════════════════════════════════
+# DETAILED METRICS TABLE
+# ══════════════════════════════════════════════════════════════════════════════
+with st.expander("🔬 Full Metrics Detail", expanded=False):
+    m = metrics
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("**Returns**")
+        st.json({
+            "Total Return":      fmt_pct(m["total_return_pct"]),
+            "Annualized Return": fmt_pct(m["annualized_return"]*100),
+            "Initial Capital":   fmt_dollar(m["initial_capital"]),
+            "Final Value":       fmt_dollar(m["final_value"]),
+        })
+    with col2:
+        st.markdown("**Risk**")
+        st.json({
+            "Sharpe Ratio":       round(m["sharpe_ratio"],3),
+            "Sortino Ratio":      round(m["sortino_ratio"],3),
+            "Calmar Ratio":       round(m["calmar_ratio"],3),
+            "Max Drawdown":       fmt_pct(m["max_drawdown_pct"]),
+            "Annual Volatility":  fmt_pct(m["volatility_annual"]*100),
+            "VaR 95%":            fmt_pct(m["var_95"]*100,3),
+            "VaR 99%":            fmt_pct(m["var_99"]*100,3),
+        })
+    with col3:
+        st.markdown("**Trades**")
+        st.json({
+            "Total Trades":   m.get("total_trades",0),
+            "Win Rate":       fmt_pct(m.get("win_rate",0)*100,1),
+            "Profit Factor":  round(m.get("profit_factor",0),2),
+            "Avg Win":        fmt_dollar(m.get("avg_win",0)),
+            "Avg Loss":       fmt_dollar(m.get("avg_loss",0)),
+            "Best Trade":     fmt_dollar(m.get("best_trade",0)),
+            "Worst Trade":    fmt_dollar(m.get("worst_trade",0)),
+            "Expectancy":     fmt_dollar(m.get("expectancy",0)),
+        })
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FOOTER
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown("---")
+st.markdown(
+    '<p style="text-align:center;font-family:Share Tech Mono,monospace;'
+    'font-size:0.72rem;color:#30363d;letter-spacing:0.15em;">'
+    'ALGORITHMIC TRADING ENGINE · BUILT BY FALGUN GADHIYA · '
+    'DATA: YAHOO FINANCE · NOT FINANCIAL ADVICE'
+    '</p>',
+    unsafe_allow_html=True,
+)
