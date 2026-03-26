@@ -5,7 +5,8 @@ yfinance
 plotly
 scikit-learn
 xgboost
-streamlit
+streamlit==1.32.0
+altair==4.2.2
 pyyaml
 python-dateutil
 tqdm
